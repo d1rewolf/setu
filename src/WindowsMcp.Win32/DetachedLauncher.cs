@@ -13,6 +13,8 @@ namespace WindowsMcp.Win32;
 /// First CreateProcess with CREATE_BREAKAWAY_FROM_JOB; if the job the server runs in (Task Scheduler)
 /// forbids breakaway, Windows says ERROR_ACCESS_DENIED and the program is started through WMI
 /// Win32_Process.Create instead, whose parent is WmiPrvSE and outside every job.
+/// Console programs get their own visible console window on both paths (CREATE_NEW_CONSOLE here, and
+/// Win32_Process.Create does the same), so John can see and use them; GUI programs start normally.
 /// </summary>
 public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
 {
@@ -24,7 +26,7 @@ public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
     {
         var commandLine = BuildCommandLine(path, arguments);
         var flags = NativeMethods.CREATE_NEW_PROCESS_GROUP | NativeMethods.CREATE_BREAKAWAY_FROM_JOB;
-        if (IsConsoleProgram(Unquote(path))) flags |= NativeMethods.DETACHED_PROCESS;
+        if (IsConsoleProgram(Unquote(path))) flags |= NativeMethods.CREATE_NEW_CONSOLE;
 
         if (TryCreateProcess(commandLine, flags, workingDirectory, out var pid, out var error)) return pid;
 
@@ -81,8 +83,9 @@ public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
 
     /// <summary>
     /// True when the program resolves (like CreateProcess would, roughly) to a PE image with the console
-    /// subsystem. Anything that cannot be resolved or read counts as not a console program, so GUI programs
-    /// and scripts keep their normal behaviour.
+    /// subsystem, which then gets a new visible console instead of inheriting the server's (if any).
+    /// Anything that cannot be resolved or read counts as not a console program and gets no console flag,
+    /// so GUI programs and scripts keep their normal behaviour.
     /// </summary>
     private static unsafe bool IsConsoleProgram(string program)
     {
@@ -119,15 +122,23 @@ public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
 
     private int StartThroughWmi(string path, string commandLine, string? workingDirectory)
     {
+        // With redirected stderr, powershell.exe -EncodedCommand writes error and progress records as CLIXML.
+        // Progress is silenced and every error is caught and written as its plain message, so only plain text
+        // reaches stderr (Explain also strips any CLIXML that still gets through).
         var script = new StringBuilder()
             .AppendLine("$ErrorActionPreference = 'Stop'")
-            .Append("$a = @{ CommandLine = ").Append(PowerShellLiteral(commandLine)).AppendLine(" }");
+            .AppendLine("$ProgressPreference = 'SilentlyContinue'")
+            .AppendLine("try {")
+            .Append("  $a = @{ CommandLine = ").Append(PowerShellLiteral(commandLine)).AppendLine(" }");
         if (workingDirectory is not null)
-            script.Append("$a.CurrentDirectory = ").AppendLine(PowerShellLiteral(workingDirectory));
+            script.Append("  $a.CurrentDirectory = ").AppendLine(PowerShellLiteral(workingDirectory));
         script
-            .AppendLine("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments $a")
-            .AppendLine("if ($r.ReturnValue -ne 0) { [Console]::Error.WriteLine(\"Win32_Process.Create returned $($r.ReturnValue)\"); exit 1 }")
-            .AppendLine("[Console]::Out.WriteLine($r.ProcessId)");
+            .AppendLine("  $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments $a")
+            .AppendLine("  if ($r.ReturnValue -ne 0) { [Console]::Error.WriteLine(\"Win32_Process.Create returned $($r.ReturnValue)\"); exit 1 }")
+            .AppendLine("  [Console]::Out.WriteLine($r.ProcessId)")
+            .AppendLine("} catch {")
+            .AppendLine("  [Console]::Error.WriteLine($_.Exception.Message); exit 1")
+            .AppendLine("}");
 
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script.ToString()));
         var psi = new ProcessStartInfo
@@ -140,7 +151,16 @@ public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
             RedirectStandardError = true,
         };
 
-        using var ps = Process.Start(psi)
+        Process? started;
+        try
+        {
+            started = Process.Start(psi);
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
+        {
+            throw new McpException($"Could not start {path}: PowerShell could not be started for the WMI fallback ({ex.Message})");
+        }
+        using var ps = started
             ?? throw new McpException($"Could not start {path}: PowerShell did not start for the WMI fallback");
         var stdout = ps.StandardOutput.ReadToEndAsync();
         var stderr = ps.StandardError.ReadToEndAsync();
@@ -150,8 +170,8 @@ public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
             throw new McpException($"Could not start {path}: the WMI fallback did not answer within {WmiTimeout.TotalSeconds:0} s");
         }
         ps.WaitForExit(); // flush the redirected streams
-        var output = stdout.GetAwaiter().GetResult().Trim();
-        var errors = stderr.GetAwaiter().GetResult().Trim();
+        var output = StripClixml(stdout.GetAwaiter().GetResult());
+        var errors = StripClixml(stderr.GetAwaiter().GetResult());
 
         if (ps.ExitCode != 0 || !int.TryParse(LastLine(output), NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid) || pid <= 0)
         {
@@ -180,6 +200,13 @@ public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
             sb.Append(c);
         }
         return sb.Append('\'').ToString();
+    }
+
+    /// <summary>Drops everything from a "#&lt; CLIXML" marker onward (serialized PowerShell records), then trims.</summary>
+    private static string StripClixml(string text)
+    {
+        var marker = text.IndexOf("#< CLIXML", StringComparison.Ordinal);
+        return (marker >= 0 ? text[..marker] : text).Trim();
     }
 
     private static string Explain(string detail) => detail switch

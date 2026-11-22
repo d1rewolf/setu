@@ -211,7 +211,7 @@ internal static unsafe partial class NativeMethods
     internal const int ERROR_ACCESS_DENIED = 5;
     internal const uint CREATE_NEW_PROCESS_GROUP = 0x00000200;
     internal const uint CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
-    internal const uint DETACHED_PROCESS = 0x00000008;
+    internal const uint CREATE_NEW_CONSOLE = 0x00000010;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct STARTUPINFOW
