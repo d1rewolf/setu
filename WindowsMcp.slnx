@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/WindowsMcp.Core/WindowsMcp.Core.csproj" />
     <Project Path="src/WindowsMcp.Win32/WindowsMcp.Win32.csproj" />
+    <Project Path="src/WindowsMcp/WindowsMcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WindowsMcp.Core.Tests/WindowsMcp.Core.Tests.csproj" />
