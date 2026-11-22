@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/setu-logo.svg" width="128" alt="Setu logo: a stone arch bridge over water"></p>
+
 # Setu
 
 Setu (सेतु, Sanskrit for "bridge") is an MCP server that runs on a Windows machine, in your logged-on desktop session, and lets an agent on another machine (for example Claude Code on Linux) work on it. The agent can read and edit files, run PowerShell and cmd commands, start programs, and see and drive the screen.
