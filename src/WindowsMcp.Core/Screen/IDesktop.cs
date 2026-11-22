@@ -25,6 +25,13 @@ public sealed record KeyChord(IReadOnlyList<string> Modifiers, string Key);
 public interface IDesktop
 {
     DesktopState State();
+
+    /// <summary>
+    /// The foreground window when its process runs at a higher integrity level than this one (for example
+    /// an Administrator terminal), else null. Windows then drops this process's synthetic input and
+    /// refuses to change the foreground, while still reporting success.
+    /// </summary>
+    WindowInfo? ElevatedForegroundWindow();
     IReadOnlyList<WindowInfo> ListWindows();
     Capture Capture(CaptureTarget target, int? maxWidth);
     void Click(int x, int y, MouseButton button, bool doubleClick);

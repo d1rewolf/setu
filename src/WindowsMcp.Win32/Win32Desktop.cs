@@ -46,6 +46,55 @@ public sealed partial class Win32Desktop : IDesktop
         }
     }
 
+    public WindowInfo? ElevatedForegroundWindow()
+    {
+        var hwnd = NativeMethods.GetForegroundWindow();
+        if (hwnd == 0 || NativeMethods.GetWindowThreadProcessId(hwnd, out var pid) == 0) return null;
+        var theirs = ProcessIntegrity(pid);
+        // Unknown on either side: don't block; the input tools then behave as before.
+        if (theirs is null || OwnIntegrity.Value is not { } ours || theirs <= ours) return null;
+        _ = NativeMethods.GetWindowRect(hwnd, out var r);
+        return new WindowInfo(
+            hwnd, WindowTitle(hwnd), ProcessName(pid), (int)pid,
+            r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, NativeMethods.IsIconic(hwnd), Foreground: true);
+    }
+
+    private static readonly Lazy<uint?> OwnIntegrity = new(() => TokenIntegrity(NativeMethods.GetCurrentProcess()));
+
+    private static uint? ProcessIntegrity(uint pid)
+    {
+        var process = NativeMethods.OpenProcess(NativeMethods.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (process == 0) return null;
+        try
+        {
+            return TokenIntegrity(process);
+        }
+        finally
+        {
+            _ = NativeMethods.CloseHandle(process);
+        }
+    }
+
+    /// <summary>The mandatory integrity level RID (0x2000 medium, 0x3000 high, ...) of a process, or null if unreadable.</summary>
+    private static unsafe uint? TokenIntegrity(nint process)
+    {
+        if (!NativeMethods.OpenProcessToken(process, NativeMethods.TOKEN_QUERY, out var token)) return null;
+        try
+        {
+            // TOKEN_MANDATORY_LABEL: a SID_AND_ATTRIBUTES whose first field is the SID pointer, followed by the SID.
+            const uint Size = 128;
+            var buffer = stackalloc byte[(int)Size];
+            if (!NativeMethods.GetTokenInformation(token, NativeMethods.TokenIntegrityLevel, buffer, Size, out _)) return null;
+            var sid = *(nint*)buffer;
+            var count = *NativeMethods.GetSidSubAuthorityCount(sid);
+            return count == 0 ? null : *NativeMethods.GetSidSubAuthority(sid, (uint)(count - 1));
+        }
+        finally
+        {
+            _ = NativeMethods.CloseHandle(token);
+        }
+    }
+
     private static unsafe string? UserObjectName(nint handle)
     {
         const int Chars = 256;

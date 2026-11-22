@@ -39,6 +39,39 @@ public sealed class ScreenToolsTests
         t.ListWindows();
     }
 
+    private static readonly WindowInfo AdminTerminal =
+        new(42, "Administrator: Windows PowerShell", "WindowsTerminal", 8212, 0, 0, 100, 100, false, true);
+
+    [Fact]
+    public void InputTools_ElevatedForeground_ThrowPlainError_WithoutSendingInput()
+    {
+        var (t, d) = Make();
+        d.ElevatedForeground = AdminTerminal;
+        var calls = new Action[]
+        {
+            () => t.Click(1, 2), () => t.TypeText("x"), () => t.SendKeys("enter"),
+            () => t.Scroll(0, 0, 1), () => t.FocusWindow(7),
+        };
+        foreach (var call in calls)
+        {
+            var ex = Assert.Throws<McpException>(call);
+            Assert.Contains("'Administrator: Windows PowerShell' (WindowsTerminal)", ex.Message);
+            Assert.Contains("running as administrator", ex.Message);
+            Assert.Contains("screenshot, list_windows, file and shell tools still work", ex.Message);
+        }
+        Assert.Empty(d.Calls);
+    }
+
+    [Fact]
+    public void ReadOnlyScreenTools_ElevatedForeground_StillWork()
+    {
+        var (t, d) = Make();
+        d.ElevatedForeground = AdminTerminal;
+        t.Screenshot();
+        t.ListWindows();
+        Assert.Equal(["Capture", "ListWindows"], d.Calls);
+    }
+
     [Fact]
     public void ListWindows_TabSeparatedLines()
     {

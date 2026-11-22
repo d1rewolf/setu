@@ -62,7 +62,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("True for a double click.")] bool double_click = false)
         => ToolGuard.Run(log, "click", () =>
         {
-            RequireAvailable();
+            RequireInputAllowed();
             if (!Enum.TryParse<MouseButton>(button?.Trim(), ignoreCase: true, out var b) || !Enum.IsDefined(b))
                 throw new ToolInputException($"Unknown button '{button}'; use left, right or middle");
             desktop.Click(x, y, b, double_click);
@@ -75,7 +75,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("The text to type.")] string text)
         => ToolGuard.Run(log, "type_text", () =>
         {
-            RequireAvailable();
+            RequireInputAllowed();
             desktop.TypeText(text ?? "");
             return "Typed";
         });
@@ -86,7 +86,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("Space-separated chords, e.g. \"ctrl+shift+s enter\".")] string keys)
         => ToolGuard.Run(log, "send_keys", () =>
         {
-            RequireAvailable();
+            RequireInputAllowed();
             desktop.SendKeys(KeySpec.Parse(keys));
             return "Sent";
         });
@@ -99,7 +99,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("Wheel notches; positive up, negative down.")] int amount)
         => ToolGuard.Run(log, "scroll", () =>
         {
-            RequireAvailable();
+            RequireInputAllowed();
             desktop.Scroll(x, y, amount);
             return "Scrolled";
         });
@@ -110,7 +110,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("Window handle from list_windows.")] long handle)
         => ToolGuard.Run(log, "focus_window", () =>
         {
-            RequireAvailable();
+            RequireInputAllowed();
             if (!desktop.FocusWindow(handle))
                 throw new McpException($"Windows refused to bring {handle} to the foreground");
             return "Focused";
@@ -128,6 +128,20 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         var state = desktop.State();
         if (state != DesktopState.Available)
             throw new McpException($"The screen is locked or the session is disconnected ({state}); file and shell tools still work.");
+    }
+
+    /// <summary>
+    /// Input tools need the desktop, and no elevated window in front: Windows silently drops input from a
+    /// normal process then, so a "Clicked" would be a lie.
+    /// </summary>
+    private void RequireInputAllowed()
+    {
+        RequireAvailable();
+        if (desktop.ElevatedForegroundWindow() is { } w)
+            throw new McpException(
+                $"The window in front, '{OneField(w.Title)}' ({OneField(w.ProcessName)}), is running as administrator, " +
+                "so Windows blocks mouse and keyboard input from windows-mcp. Ask the user to switch to another window " +
+                "or minimise it; screenshot, list_windows, file and shell tools still work.");
     }
 
     private static CaptureTarget ParseTarget(string? target)

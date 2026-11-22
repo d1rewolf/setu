@@ -117,6 +117,7 @@ This removes the task and the program. It keeps `%LOCALAPPDATA%\windows-mcp` (to
 ## Limits to know about
 
 - The screen tools (`screenshot`, `click`, `type_text`, `send_keys`, `scroll`, `focus_window`) need your Windows session to be drawing. If you view the machine over RDP and then disconnect, Windows stops drawing the session and these tools return a locked/disconnected error. The file and shell tools keep working, and so does `list_windows`. Reconnecting over RDP fixes it. If this gets in the way, a later step can hand the session back to the console when you disconnect (`tscon ... /dest:console`).
+- While a window running as administrator (for example an "Administrator: Windows PowerShell" terminal) is in front, Windows blocks mouse and keyboard input from windows-mcp. The input tools (`click`, `type_text`, `send_keys`, `scroll`, `focus_window`) then return an error saying so; click another window or minimise that one. `screenshot` and `list_windows` keep working.
 - Programs started from the `powershell` or `cmd` tools may be stopped when the server restarts (for example during an update). Use `start_process` for apps that must keep running.
 - The server runs only while you are logged on, because it is started at logon and needs your desktop. After a reboot, log in once.
 - If something fails, read `%LOCALAPPDATA%\windows-mcp\windows-mcp.log` on Windows.

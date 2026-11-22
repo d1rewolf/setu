@@ -511,17 +511,25 @@ sealed class Smoke
         var before = PngOf(await Ok("screenshot", ("target", $"window:{win.Handle}")));
 
         // The VM clipboard is overwritten here (see docs/smoke-checklist.md).
-        await PS("Set-Clipboard -Value 'wmcp-before'");
+        await PS(ClipboardRetry("Set-Clipboard -Value 'wmcp-before'"));
         await Ok("type_text", ("text", "smoke"));
         await Task.Delay(500);
         var after = PngOf(await Ok("screenshot", ("target", $"window:{win.Handle}")));
         await Ok("send_keys", ("keys", "ctrl+a ctrl+c"));
         await Task.Delay(500);
-        var clip = await PS("Get-Clipboard -Raw");
+        var clip = await PS(ClipboardRetry("Get-Clipboard -Raw"));
         Require(clip == "smoke", $"clipboard after ctrl+a ctrl+c was '{clip}', expected 'smoke'");
 
         PngWidth(before);
         PngWidth(after);
         Require(!before.AsSpan().SequenceEqual(after), "typed text reached the window (clipboard matched) but the screenshots are identical");
     }
+
+    /// <summary>
+    /// Another program (Notepad as it activates, clipboard history) can hold the clipboard open for a moment,
+    /// and then Set/Get-Clipboard fail with "Requested Clipboard operation did not succeed". Retry for ~3 s.
+    /// </summary>
+    static string ClipboardRetry(string command) =>
+        "$i=0; while ($true) { try { " + command + " -ErrorAction Stop; break } " +
+        "catch { if (++$i -ge 10) { throw }; Start-Sleep -Milliseconds 300 } }";
 }

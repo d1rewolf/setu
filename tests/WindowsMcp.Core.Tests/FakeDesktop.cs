@@ -9,11 +9,14 @@ public sealed class FakeDesktop : IDesktop
     public List<WindowInfo> Windows { get; set; } = [];
     public Capture NextCapture { get; set; } = new([1, 2, 3], 0, 0, 100, 50, 1.0);
     public bool FocusResult { get; set; } = true;
+    public WindowInfo? ElevatedForeground { get; set; }
     public List<string> Calls { get; } = [];
     public (CaptureTarget Target, int? MaxWidth)? LastCapture { get; private set; }
     public IReadOnlyList<KeyChord>? LastChords { get; private set; }
 
     public DesktopState State() => CurrentState;
+
+    public WindowInfo? ElevatedForegroundWindow() => ElevatedForeground;
 
     public IReadOnlyList<WindowInfo> ListWindows()
     {
