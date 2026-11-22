@@ -80,4 +80,14 @@ public class ToolGuardTests
             ToolGuard.RunAsync<int>(UnwritableLog(), "t", () => throw new ToolInputException("bad arg")));
         Assert.Equal("bad arg", ex.Message);
     }
+
+    [Fact]
+    public void Run_InvalidLogPath_OutcomesUnchanged()
+    {
+        var log = new RequestLog("bad\0path");
+        Assert.Equal(42, ToolGuard.Run(log, "t", () => 42));
+        var ex = Assert.Throws<McpException>(() =>
+            ToolGuard.Run<int>(log, "t", () => throw new ToolInputException("bad arg")));
+        Assert.Equal("bad arg", ex.Message);
+    }
 }

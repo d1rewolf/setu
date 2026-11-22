@@ -19,7 +19,7 @@ public sealed class RequestLog
         {
             lock (_gate) File.AppendAllText(_path, text);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception)
         {
             // Logging is a side channel: it must never change a tool's outcome.
         }
