@@ -31,7 +31,7 @@ ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp/inst
 
 This runs as you, with no admin rights. It copies the exe to `%LOCALAPPDATA%\Programs\windows-mcp`, registers a Task Scheduler task named `windows-mcp` that starts it every time you log on, starts it now, and waits for it to create its token. Success looks like "windows-mcp is installed and running" followed by the port (47631 unless you changed it).
 
-If it warns that OpenSSH Server is missing or not running, you are already connected over SSH to something, but on a fresh machine run these once in an Administrator PowerShell on Windows. The script does not run them for you:
+If you ran the script at the Windows desktop or over RDP instead of over SSH, it may warn that OpenSSH Server is missing or not running. You need it to reach windows-mcp from Linux. Run these once in an Administrator PowerShell on Windows; the script does not run them for you:
 
 ```
 Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
@@ -41,7 +41,7 @@ Start-Service sshd
 
 If the server does not start, the script prints the last lines of `%LOCALAPPDATA%\windows-mcp\windows-mcp.log`. A startup problem is also logged there:
 
-- "already running": another copy is running for your user.
+- "startup failed: windows-mcp is already running for this user.": another copy is already running for your Windows user, in any session (a copy started over SSH sees the one on your desktop). The second copy exits with code 2.
 - "Port ... is in use": set a different `"port"` in `%LOCALAPPDATA%\windows-mcp\config.json`, for example `{"port": 47632}`, then run `update.ps1` again. Use the same port in the tunnel and `.mcp.json` below.
 
 ## 4. Read the token
@@ -52,7 +52,7 @@ The server created a random token on first start. Read it into an environment va
 export WINDOWS_MCP_TOKEN=$(ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token')
 ```
 
-The single quotes matter: they stop your Linux shell from changing the backslashes. Over OpenSSH on Windows, the remote command runs in cmd by default, so `%LOCALAPPDATA%` expands to the folder on Windows. If your Windows default SSH shell is PowerShell, use `$env:LOCALAPPDATA` instead, with the dollar sign escaped for your local shell:
+The single quotes matter: they stop your Linux shell from changing the backslashes. Over OpenSSH on Windows, the remote command runs in cmd by default, so `%LOCALAPPDATA%` expands to the folder on Windows. If your Windows default SSH shell is PowerShell, use `$env:LOCALAPPDATA` instead. The single quotes also stop your Linux shell from expanding `$env`, so nothing needs escaping:
 
 ```
 export WINDOWS_MCP_TOKEN=$(ssh user@vm 'type $env:LOCALAPPDATA\windows-mcp\token')
@@ -116,6 +116,7 @@ This removes the task and the program. It keeps `%LOCALAPPDATA%\windows-mcp` (to
 
 ## Limits to know about
 
-- The screen tools (`screenshot`, `click`, `type_text`, `send_keys`, `scroll`, `focus_window`, `list_windows`) need your Windows session to be drawing. If you view the machine over RDP and then disconnect, Windows stops drawing the session and these tools return a locked/disconnected error. The file and shell tools keep working. Reconnecting over RDP fixes it. If this gets in the way, a later step can hand the session back to the console when you disconnect (`tscon ... /dest:console`).
+- The screen tools (`screenshot`, `click`, `type_text`, `send_keys`, `scroll`, `focus_window`) need your Windows session to be drawing. If you view the machine over RDP and then disconnect, Windows stops drawing the session and these tools return a locked/disconnected error. The file and shell tools keep working, and so does `list_windows`. Reconnecting over RDP fixes it. If this gets in the way, a later step can hand the session back to the console when you disconnect (`tscon ... /dest:console`).
+- Programs started from the `powershell` or `cmd` tools may be stopped when the server restarts (for example during an update). Use `start_process` for apps that must keep running.
 - The server runs only while you are logged on, because it is started at logon and needs your desktop. After a reboot, log in once.
 - If something fails, read `%LOCALAPPDATA%\windows-mcp\windows-mcp.log` on Windows.

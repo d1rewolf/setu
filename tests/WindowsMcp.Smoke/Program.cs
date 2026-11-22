@@ -93,6 +93,7 @@ sealed class Smoke
             ("list_dir_newest_first", ListDirNewestFirst),
             ("search_content", SearchContent),
             ("powershell_unicode_output", PowerShellUnicodeOutput),
+            ("powershell_error_plain", PowerShellErrorPlain),
             ("cmd_exit_code", CmdExitCode),
             ("powershell_prompt_does_not_hang", PowerShellPromptDoesNotHang),
             ("powershell_timeout_kills_tree", PowerShellTimeoutKillsTree),
@@ -287,7 +288,13 @@ sealed class Smoke
     private async Task AuthRejectsBadToken()
     {
         const string body = """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}""";
-        foreach (var header in new[] { "Bearer " + _token + "x", "Bearer wrong-token", null })
+        // The case names, never the header itself: the first case contains the real token.
+        foreach (var (name, header) in new (string, string?)[]
+                 {
+                     ("real token with an extra character", "Bearer " + _token + "x"),
+                     ("wrong token", "Bearer wrong-token"),
+                     ("no Authorization header", null),
+                 })
         {
             using var http = new HttpClient();
             using var req = new HttpRequestMessage(HttpMethod.Post, _url) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
@@ -296,7 +303,7 @@ sealed class Smoke
             if (header is not null) req.Headers.TryAddWithoutValidation("Authorization", header);
             using var res = await http.SendAsync(req);
             Require(res.StatusCode == HttpStatusCode.Unauthorized,
-                $"expected 401 for Authorization '{header ?? "(none)"}', got {(int)res.StatusCode}");
+                $"expected 401 for {name}, got {(int)res.StatusCode}");
         }
     }
 
@@ -394,6 +401,14 @@ sealed class Smoke
     {
         var r = await Ok("powershell", ("command", "Write-Output 'héllo→'"));
         Require(Section(r.Text, "stdout").Contains("héllo→"), $"stdout was: {Section(r.Text, "stdout").Trim()}");
+    }
+
+    private async Task PowerShellErrorPlain()
+    {
+        var r = await Ok("powershell", ("command", "Write-Error boom"));
+        var stderr = Section(r.Text, "stderr");
+        Require(stderr.Contains("boom"), $"stderr was: {stderr.Trim()}");
+        Require(!stderr.Contains("#< CLIXML"), $"stderr is still CLIXML: {stderr.Trim()}");
     }
 
     private async Task CmdExitCode()

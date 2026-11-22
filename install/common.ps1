@@ -7,6 +7,8 @@ $dest      = Join-Path $progDir 'windows-mcp.exe'
 $dataDir   = Join-Path $env:LOCALAPPDATA 'windows-mcp'
 $tokenFile = Join-Path $dataDir 'token'
 $logFile   = Join-Path $dataDir 'windows-mcp.log'
+# Printed when the server does not come up in time: the logon task never starts without a desktop session.
+$sessionHint = "Are you logged on at the VM's desktop? The task only runs in your interactive session."
 
 function Get-McpPort {
     $port = 47631
@@ -60,6 +62,7 @@ function Wait-McpReady([int]$Port, [int]$Seconds = 15) {
     }
     if (-not $ready) {
         Write-Warning "windows-mcp is not running and listening on port $Port after $Seconds seconds."
+        Write-Host $sessionHint
         if (Test-Path -LiteralPath $logFile) {
             Write-Host "Last lines of ${logFile}:"
             Get-Content -LiteralPath $logFile -Tail 15

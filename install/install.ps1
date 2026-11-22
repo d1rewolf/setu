@@ -48,6 +48,7 @@ while (-not (Test-Path -LiteralPath $tokenFile) -and (Get-Date) -lt $deadline) {
 }
 if (-not (Test-Path -LiteralPath $tokenFile)) {
     Write-Warning "The token file did not appear within 15 seconds: $tokenFile"
+    Write-Host $sessionHint
     if (Test-Path -LiteralPath $logFile) {
         Write-Host "Last lines of ${logFile}:"
         Get-Content -LiteralPath $logFile -Tail 15

@@ -14,7 +14,7 @@ Replace `user@vm` with your Windows login and address. The commands for the inst
    ```
    ssh user@vm 'powershell -NoProfile -Command "$p = Start-Process \"$env:LOCALAPPDATA\Programs\windows-mcp\windows-mcp.exe\" -Wait -PassThru; \"exit=\" + $p.ExitCode"'
    ```
-   Success: it returns straight away with `exit=2`, and the log (`%LOCALAPPDATA%\windows-mcp\windows-mcp.log`) says another copy is already running.
+   Success: it returns straight away with `exit=2`, and the log (`%LOCALAPPDATA%\windows-mcp\windows-mcp.log`) ends with the line `startup failed: windows-mcp is already running for this user.` This copy runs in the SSH session, not on your desktop, so it also proves the check works across sessions.
 6. Read the token and open the tunnel ([connecting.md](connecting.md) steps 4 and 5). Save the token to a file only you can read:
    ```
    (umask 077; ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token' > /tmp/wmcp.token)
@@ -46,6 +46,18 @@ Use any MCP client for these, for example Claude Code connected as in [connectin
 
 **start_process survives a restart.** Call `start_process` for `notepad.exe` and note the PID. Then run the update over SSH (as in "Updating" in [connecting.md](connecting.md)), reconnect, and call `powershell` with `Get-Process -Id <pid>`. Success: Notepad is still running. (The smoke client checks only the 3 second part of this, because it cannot restart the server it is talking to.) Close Notepad afterwards.
 
+**Programs started from powershell may stop on restart.** Call `powershell` with `(Start-Process notepad -PassThru).Id` and note the PID. Run the update over SSH as above, reconnect, and call `powershell` with `Get-Process -Id <pid>`. Record whether Notepad is still alive. Either result is acceptable: the `powershell` and `cmd` tool descriptions already warn that such programs may be stopped and point to `start_process`. Close Notepad if it is still open.
+
+**Restart after a crash.** The scheduled task is set to restart the server up to 999 times, one minute apart, if it fails. Kill it over SSH:
+```
+ssh user@vm 'powershell -NoProfile -Command "Stop-Process -Name windows-mcp -Force"'
+```
+Then check every 30 seconds or so, for up to about 2 minutes, whether it is back:
+```
+ssh user@vm 'powershell -NoProfile -Command "Get-Process windows-mcp -ErrorAction SilentlyContinue; Get-Content (Join-Path $env:LOCALAPPDATA windows-mcp\windows-mcp.log) -Tail 3"'
+```
+Success: a `windows-mcp` process is listed again, and the log has a new `listening on http://127.0.0.1:...` line with a time after the kill. Reopen the tunnel if needed and confirm a `list_dir` call works. Record how long it took. If it has not come back after 2 minutes, record FAIL: Task Scheduler does not treat a killed process as a failure to restart, and the follow-up is to add a repeating trigger (for example every 5 minutes; the task already ignores a new start while one is running). Start it again by hand with `ssh user@vm schtasks /run /tn windows-mcp`.
+
 **Locked screen.**
 1. Call `powershell` with `rundll32 user32.dll,LockWorkStation`.
 2. Call `screenshot`. Success: a tool error saying the screen is locked or the session is disconnected.
@@ -64,14 +76,16 @@ Use any MCP client for these, for example Claude Code connected as in [connectin
 
 ## 4. Which launcher path was used
 
-`start_process` first tries CreateProcess with breakaway, and falls back to WMI if Windows denies that. The log says so only when the fallback happens. On the VM:
+`start_process` first tries CreateProcess with breakaway, and falls back to WMI if Windows denies that. Every call logs a `start_process NNms ok` line, but only the fallback mentions WMI. On the VM:
 
 ```
-ssh user@vm findstr /i "start_process" "%LOCALAPPDATA%\windows-mcp\windows-mcp.log"
+ssh user@vm 'findstr /c:"WMI" "%LOCALAPPDATA%\windows-mcp\windows-mcp.log"'
 ```
 
-- Lines saying "CreateProcess with breakaway was denied; starting ... through WMI" and "WMI started" mean the **WMI** path was used.
-- No `start_process` lines at all, after you have started processes, means plain **CreateProcess** worked.
+The single quotes keep the quotes and backslashes intact on the way through your Linux shell, so the path works even if it contains spaces.
+
+- Lines saying "CreateProcess with breakaway was denied; starting ... through WMI Win32_Process.Create" and "WMI started ... as PID" mean the **WMI** path was used.
+- No output at all, after you have started processes, means plain **CreateProcess** worked.
 
 Record which one in the table.
 
@@ -98,6 +112,7 @@ Fill this in after the run. Use PASS or FAIL, and a short note for anything that
 | Smoke: list_dir_newest_first | | |
 | Smoke: search_content | | |
 | Smoke: powershell_unicode_output | | |
+| Smoke: powershell_error_plain | | |
 | Smoke: cmd_exit_code | | |
 | Smoke: powershell_prompt_does_not_hang | | |
 | Smoke: powershell_timeout_kills_tree | | |
@@ -109,6 +124,8 @@ Fill this in after the run. Use PASS or FAIL, and a short note for anything that
 | start_process cmd.exe shows a visible console window | | |
 | Screenshot of the tray shows OBS and Sakshi | | |
 | start_process survives update.ps1 (PID still alive) | | |
+| powershell Start-Process notepad: alive after update.ps1? (record yes/no) | | |
+| Server restarts after Stop-Process (time to come back) | | |
 | Locked screen: screenshot errors, list_dir works | | |
 | RDP disconnect: screenshot errors, list_dir works | | |
 | Idle past sleep timeout: still reachable | | |
