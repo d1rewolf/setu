@@ -12,11 +12,10 @@ public static class ToolGuard
     public static T Run<T>(RequestLog log, string tool, Func<T> body)
     {
         var sw = Stopwatch.StartNew();
+        T result;
         try
         {
-            var result = body();
-            log.Write($"{tool} {sw.ElapsedMilliseconds}ms ok");
-            return result;
+            result = body();
         }
         catch (Exception ex)
         {
@@ -25,16 +24,17 @@ public static class ToolGuard
             if (ReferenceEquals(mapped, ex)) throw;
             throw mapped;
         }
+        log.Write($"{tool} {sw.ElapsedMilliseconds}ms ok");
+        return result;
     }
 
     public static async Task<T> RunAsync<T>(RequestLog log, string tool, Func<Task<T>> body)
     {
         var sw = Stopwatch.StartNew();
+        T result;
         try
         {
-            var result = await body();
-            log.Write($"{tool} {sw.ElapsedMilliseconds}ms ok");
-            return result;
+            result = await body();
         }
         catch (Exception ex)
         {
@@ -43,6 +43,8 @@ public static class ToolGuard
             if (ReferenceEquals(mapped, ex)) throw;
             throw mapped;
         }
+        log.Write($"{tool} {sw.ElapsedMilliseconds}ms ok");
+        return result;
     }
 
     private static Exception Map(Exception ex) => ex switch

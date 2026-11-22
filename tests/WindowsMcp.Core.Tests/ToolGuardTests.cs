@@ -49,4 +49,35 @@ public class ToolGuardTests
         }
         finally { File.Delete(path); }
     }
+
+    private static RequestLog UnwritableLog() =>
+        new(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing-dir", "log.txt"));
+
+    [Fact]
+    public void Run_UnwritableLog_SuccessResultUnchanged()
+    {
+        Assert.Equal(42, ToolGuard.Run(UnwritableLog(), "t", () => 42));
+    }
+
+    [Fact]
+    public async Task RunAsync_UnwritableLog_SuccessResultUnchanged()
+    {
+        Assert.Equal(42, await ToolGuard.RunAsync(UnwritableLog(), "t", () => Task.FromResult(42)));
+    }
+
+    [Fact]
+    public void Run_UnwritableLog_FailureMessageUnchanged()
+    {
+        var ex = Assert.Throws<McpException>(() =>
+            ToolGuard.Run<int>(UnwritableLog(), "t", () => throw new ToolInputException("bad arg")));
+        Assert.Equal("bad arg", ex.Message);
+    }
+
+    [Fact]
+    public async Task RunAsync_UnwritableLog_FailureMessageUnchanged()
+    {
+        var ex = await Assert.ThrowsAsync<McpException>(() =>
+            ToolGuard.RunAsync<int>(UnwritableLog(), "t", () => throw new ToolInputException("bad arg")));
+        Assert.Equal("bad arg", ex.Message);
+    }
 }
