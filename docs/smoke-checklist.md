@@ -12,17 +12,18 @@ Replace `user@vm` with your Windows login and address. The commands for the inst
 4. **No console window at logon.** Log off and back on (or restart the task). Success: windows-mcp is running (check Task Manager) and no black console window appeared.
 5. **Second start exits with code 2.** While it is running, start a second copy by hand:
    ```
-   ssh user@vm '"%LOCALAPPDATA%\Programs\windows-mcp\windows-mcp.exe" & echo exit=%errorlevel%'
+   ssh user@vm 'powershell -NoProfile -Command "$p = Start-Process \"$env:LOCALAPPDATA\Programs\windows-mcp\windows-mcp.exe\" -Wait -PassThru; \"exit=\" + $p.ExitCode"'
    ```
    Success: it returns straight away with `exit=2`, and the log (`%LOCALAPPDATA%\windows-mcp\windows-mcp.log`) says another copy is already running.
 6. Read the token and open the tunnel ([connecting.md](connecting.md) steps 4 and 5). Save the token to a file only you can read:
    ```
    (umask 077; ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token' > /tmp/wmcp.token)
    ```
+   Delete it when you are done: `rm /tmp/wmcp.token`.
 
 ## 2. Run the smoke client
 
-Be logged on at the VM's desktop and leave it alone while this runs. It opens Notepad and types into it.
+Be logged on at the VM's desktop and leave it alone while this runs. It opens Notepad and types into it, and it overwrites the VM clipboard (it copies the typed text to check it).
 
 ```
 dotnet run --project tests/WindowsMcp.Smoke -- --url http://127.0.0.1:47631/mcp --token-file /tmp/wmcp.token
@@ -33,7 +34,7 @@ Success: every line starts with `PASS`, the last line is `All checks passed.`, a
 Then look at the VM:
 
 - Notepad is closed again, and `%TEMP%\wmcp-smoke` is gone. The client cleans up even when a check fails.
-- While the client ran, Notepad should have shown the word `smoke`. The client only checks that the window changed, so confirm this by eye next time you run just that check (`--only click_type_into_notepad`; Notepad is closed again at the end, so watch while it runs).
+- The client checks that the text typed into Notepad was `smoke` by copying it to the clipboard and reading it back, so there is nothing to confirm by eye. The VM clipboard now holds `smoke`.
 
 ## 3. Checks that need you
 
@@ -103,7 +104,7 @@ Fill this in after the run. Use PASS or FAIL, and a short note for anything that
 | Smoke: start_process_survives | | |
 | Smoke: list_windows_shows_notepad | | |
 | Smoke: screenshot_png_nonempty | | |
-| Smoke: click_type_into_notepad (and "smoke" seen in Notepad) | | |
+| Smoke: click_type_into_notepad | | |
 | Smoke: scratch folder and Notepad cleaned up | | |
 | start_process cmd.exe shows a visible console window | | |
 | Screenshot of the tray shows OBS and Sakshi | | |

@@ -15,7 +15,8 @@ const string Usage = """
 
       --token-file  File holding the bearer token (required).
       --url         MCP endpoint. Default: http://127.0.0.1:47631/mcp
-      --only        Run a single check by name, then exit.
+      --only        Run a single check by name, then exit. "selftest" checks the
+                    output parser only and needs no server.
 
     Each check prints PASS <name> or FAIL <name>: <why>. Exit code 0 means every
     check passed, 1 means a check failed, 2 means bad usage.
@@ -33,6 +34,11 @@ for (var i = 0; i < args.Length; i++)
             Console.Error.WriteLine(args[i] is "--help" or "-h" ? Usage : $"Unknown or incomplete option: {args[i]}\n\n{Usage}");
             return 2;
     }
+}
+if (only == "selftest")
+{
+    try { Smoke.SelfTest(); Console.WriteLine("PASS selftest"); return 0; }
+    catch (Exception e) { Console.WriteLine($"FAIL selftest: {e.Message}"); return 1; }
 }
 if (tokenFile is null)
 {
@@ -100,6 +106,12 @@ sealed class Smoke
     public async Task<int> RunAsync(string? only)
     {
         var failures = 0;
+        try { SelfTest(); }
+        catch (Exception e)
+        {
+            Console.WriteLine($"FAIL selftest: {e.Message}");
+            return 1;
+        }
         try
         {
             _client = await McpClient.CreateAsync(new HttpClientTransport(new HttpClientTransportOptions
@@ -174,13 +186,44 @@ sealed class Smoke
         return Section(r.Text, "stdout").Trim();
     }
 
-    private static string Section(string text, string name)
+    private const string TruncatedMarker = "[truncated at 64 KiB]\n";
+
+    /// <summary>Extracts one stream from the shell tools' "--- stdout ---/--- stderr ---" output.</summary>
+    internal static string Section(string text, string name)
     {
-        var start = text.IndexOf($"--- {name} ---\n", StringComparison.Ordinal);
+        var header = $"--- {name} ---\n";
+        var start = text.IndexOf(header, StringComparison.Ordinal);
         if (start < 0) return "";
-        start += name.Length + 9;
-        var next = text.IndexOf("\n--- ", start, StringComparison.Ordinal);
-        return next < 0 ? text[start..] : text[start..next];
+        start += header.Length;
+        var end = text.Length;
+        if (name == "stdout")
+        {
+            var stderr = text.IndexOf("--- stderr ---\n", start, StringComparison.Ordinal);
+            if (stderr >= 0) end = stderr;
+        }
+        var body = text[start..end];
+        return body.EndsWith(TruncatedMarker, StringComparison.Ordinal) ? body[..^TruncatedMarker.Length] : body;
+    }
+
+    public static void SelfTest()
+    {
+        const string head = "exit_code=0 timed_out=false elapsed_ms=5\n";
+        void Eq(string expected, string actual, string what)
+        {
+            if (expected != actual) throw new CheckFailed($"{what}: expected '{expected}', got '{actual}'");
+        }
+        var emptyOut = head + "--- stdout ---\n--- stderr ---\nboom\n";
+        Eq("", Section(emptyOut, "stdout"), "empty stdout");
+        Eq("boom\n", Section(emptyOut, "stderr"), "stderr after empty stdout");
+        var emptyErr = head + "--- stdout ---\nhello\n--- stderr ---\n";
+        Eq("hello\n", Section(emptyErr, "stdout"), "stdout with empty stderr");
+        Eq("", Section(emptyErr, "stderr"), "empty stderr");
+        var both = head + "--- stdout ---\na\nb\n--- stderr ---\nc\n";
+        Eq("a\nb\n", Section(both, "stdout"), "both: stdout");
+        Eq("c\n", Section(both, "stderr"), "both: stderr");
+        var trunc = head + "--- stdout ---\nxx\n" + TruncatedMarker + "--- stderr ---\n";
+        Eq("xx\n", Section(trunc, "stdout"), "truncated stdout");
+        Eq("", Section(head + "--- stdout ---\n--- stderr ---\n", "stdout"), "both empty");
     }
 
     private static string PsQuote(string s) => "'" + s.Replace("'", "''") + "'";
@@ -383,19 +426,28 @@ sealed class Smoke
 
     private async Task StartProcessSurvives()
     {
+        // Windows 11 Notepad may hand off to the packaged app: the launched PID can exit while a
+        // Notepad process that did not exist before the run keeps going. Either counts.
         var pid = await EnsureNotepad();
         await Task.Delay(TimeSpan.FromSeconds(3));
-        var r = await Ok("powershell", ("command", $"(Get-Process -Id {pid} -ErrorAction Stop).ProcessName"));
-        Require(Section(r.Text, "stdout").Trim().Equals("notepad", StringComparison.OrdinalIgnoreCase),
-            $"PID {pid} is gone after 3 s: {r.Text.Trim()}");
+        var launched = await PS($"if (Get-Process -Id {pid} -ErrorAction SilentlyContinue) {{ 'alive' }} else {{ 'gone' }}");
+        if (launched == "alive") return;
+        var current = await NotepadPids();
+        Require(current.Any(p => !_notepadBefore!.Contains(p)),
+            $"launched PID {pid} is gone and no new notepad process is running");
+    }
+
+    private async Task<HashSet<int>> NotepadPids()
+    {
+        var text = await PS("(Get-Process notepad -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) -join ','");
+        return text.Length == 0 ? [] : text.Split(',').Select(int.Parse).ToHashSet();
     }
 
     private async Task ListWindowsShowsNotepad()
     {
-        var pid = await EnsureNotepad();
+        await EnsureNotepad();
         var rows = await NotepadWindows();
         Require(rows.Count > 0, "no window with process name notepad");
-        Require(rows.Any(w => w.Pid == pid), $"notepad window(s) found, but none for PID {pid} (found PIDs {string.Join(",", rows.Select(w => w.Pid))})");
     }
 
     private sealed record Win(long Handle, int Pid);
@@ -435,16 +487,26 @@ sealed class Smoke
     {
         var pid = await EnsureNotepad();
         var wins = await NotepadWindows();
-        var win = wins.FirstOrDefault(w => w.Pid == pid) ?? wins.FirstOrDefault();
+        var win = wins.FirstOrDefault(w => w.Pid == pid)
+                  ?? wins.FirstOrDefault(w => !_notepadBefore!.Contains(w.Pid))
+                  ?? wins.FirstOrDefault();
         Require(win is not null, "no notepad window to focus");
         await Ok("focus_window", ("handle", win!.Handle));
         await Task.Delay(500);
         var before = PngOf(await Ok("screenshot", ("target", $"window:{win.Handle}")));
+
+        // The VM clipboard is overwritten here (see docs/smoke-checklist.md).
+        await PS("Set-Clipboard -Value 'wmcp-before'");
         await Ok("type_text", ("text", "smoke"));
         await Task.Delay(500);
         var after = PngOf(await Ok("screenshot", ("target", $"window:{win.Handle}")));
+        await Ok("send_keys", ("keys", "ctrl+a ctrl+c"));
+        await Task.Delay(500);
+        var clip = await PS("Get-Clipboard -Raw");
+        Require(clip == "smoke", $"clipboard after ctrl+a ctrl+c was '{clip}', expected 'smoke'");
+
         PngWidth(before);
         PngWidth(after);
-        Require(!before.AsSpan().SequenceEqual(after), "the window looks the same before and after type_text (a human should confirm 'smoke' appears)");
+        Require(!before.AsSpan().SequenceEqual(after), "typed text reached the window (clipboard matched) but the screenshots are identical");
     }
 }
