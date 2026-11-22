@@ -12,7 +12,7 @@ Replace `user@vm` with your Windows login and address. The commands for the inst
 4. **No console window at logon.** Log off and back on (or restart the task). Success: windows-mcp is running (check Task Manager) and no black console window appeared.
 5. **Second start exits with code 2.** While it is running, start a second copy by hand:
    ```
-   ssh user@vm "%LOCALAPPDATA%\Programs\windows-mcp\windows-mcp.exe" & echo exit=%errorlevel%
+   ssh user@vm '"%LOCALAPPDATA%\Programs\windows-mcp\windows-mcp.exe" & echo exit=%errorlevel%'
    ```
    Success: it returns straight away with `exit=2`, and the log (`%LOCALAPPDATA%\windows-mcp\windows-mcp.log`) says another copy is already running.
 6. Read the token and open the tunnel ([connecting.md](connecting.md) steps 4 and 5). Save the token to a file only you can read:
@@ -69,8 +69,8 @@ Use any MCP client for these, for example Claude Code connected as in [connectin
 ssh user@vm findstr /i "start_process" "%LOCALAPPDATA%\windows-mcp\windows-mcp.log"
 ```
 
-- A line saying "CreateProcess with breakaway was denied; starting ... through WMI" means the **WMI** path.
-- Only lines saying "WMI started", none saying "denied", also means WMI. No `start_process` lines at all, after you have started processes, means **CreateProcess** worked.
+- Lines saying "CreateProcess with breakaway was denied; starting ... through WMI" and "WMI started" mean the **WMI** path was used.
+- No `start_process` lines at all, after you have started processes, means plain **CreateProcess** worked.
 
 Record which one in the table.
 
