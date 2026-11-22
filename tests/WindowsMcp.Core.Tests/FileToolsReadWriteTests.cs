@@ -96,4 +96,24 @@ public sealed class FileToolsReadWriteTests : IDisposable
         Assert.Equal(original, File.ReadAllBytes(path));
         Assert.Empty(Directory.GetFiles(_dir, "*.tmp"));
     }
+
+    [Fact]
+    public void WriteFile_ExistingBinary_WithoutEncoding_FailsWithoutWriting()
+    {
+        var path = P("bin.dat");
+        byte[] original = [1, 2, 0, 3];
+        File.WriteAllBytes(path, original);
+        var ex = Assert.Throws<McpException>(() => Tools().WriteFile(path, "text"));
+        Assert.Contains("looks binary", ex.Message);
+        Assert.Equal(original, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void WriteFile_ExistingBinary_WithExplicitEncoding_Succeeds()
+    {
+        var path = P("bin2.dat");
+        File.WriteAllBytes(path, [1, 2, 0, 3]);
+        Tools().WriteFile(path, "text", encoding: "utf8");
+        Assert.Equal("text"u8.ToArray(), File.ReadAllBytes(path));
+    }
 }

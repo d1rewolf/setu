@@ -66,6 +66,8 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             if (File.Exists(full))
             {
                 var current = ReadAllShared(full);
+                if (encoding is null && TextFormat.LooksBinary(current))
+                    throw new ToolInputException($"Existing file looks binary; pass encoding explicitly to overwrite it: {path}");
                 existing = TextFormat.Detect(current, options.AnsiCodePage);
             }
 
