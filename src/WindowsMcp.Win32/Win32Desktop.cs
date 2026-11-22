@@ -83,13 +83,17 @@ public sealed partial class Win32Desktop : IDesktop
         var hwnd = RequireWindow(handle);
         if (NativeMethods.IsIconic(hwnd)) _ = NativeMethods.ShowWindow(hwnd, NativeMethods.SW_RESTORE);
 
+        // Already in front: do nothing more. Any synthetic input here could change its state.
+        if (NativeMethods.GetForegroundWindow() == hwnd) return true;
+
         // Only succeeds when this process may set the foreground itself; failure is expected otherwise and
         // the outcome is judged by GetForegroundWindow below.
         _ = NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
 
-        // A synthetic Alt tap makes Windows treat this process as having received the last input, which
-        // lifts the foreground lock. If it is blocked, SetForegroundWindow may still work; the result says.
-        _ = TrySend([KeyInput(VK_MENU, keyUp: false), KeyInput(VK_MENU, keyUp: true)]);
+        // A zero-effect synthetic mouse event (no movement, no buttons) makes Windows treat this process as
+        // having received the last input, which lifts the foreground lock. Unlike an Alt tap it cannot put
+        // a window into menu mode. If it is blocked, SetForegroundWindow may still work; the result says.
+        _ = TrySend([MouseInput(0, 0)]);
 
         _ = NativeMethods.SetForegroundWindow(hwnd);
         return NativeMethods.GetForegroundWindow() == hwnd;

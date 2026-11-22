@@ -28,10 +28,29 @@ static bool IsAddressInUse(Exception? ex)
     return false;
 }
 
+// One instance per user across all sessions: a copy started over SSH (a different, non-interactive
+// session) must see the desktop copy, so the name is in the Global namespace and keyed by the user's SID.
 // Held for the whole process lifetime (the using spans Run) so it is never collected.
-using var instance = new Mutex(initiallyOwned: true, "Local\\windows-mcp", out var createdNew);
+var userSid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+Mutex? instance;
+bool createdNew;
+try
+{
+    instance = new Mutex(initiallyOwned: true, $"Global\\windows-mcp-{userSid}", out createdNew);
+}
+catch (UnauthorizedAccessException)
+{
+    // The mutex exists but this session's token cannot open it: another copy holds it.
+    instance = null;
+    createdNew = false;
+}
+using var instanceHandle = instance;
 if (!createdNew)
+{
+    // Best effort: the log may not exist or be writable; RequestLog swallows failures.
+    log = new RequestLog(Path.Combine(data, "windows-mcp.log"));
     return Fail(2, "windows-mcp is already running for this user.");
+}
 
 var port = ServerOptions.DefaultPort;
 try
@@ -41,7 +60,15 @@ try
     var options = ServerOptions.Load(data);
     port = options.Port;
     var token = new TokenStore(data, new TokenFileAcl()).GetOrCreate();
-    KeepAwake.Start();
+    try
+    {
+        KeepAwake.Start();
+    }
+    catch (Exception ex)
+    {
+        // Sleep prevention is a convenience: the server still works without it.
+        log.Write($"keep-awake failed, continuing without it: {ex.Message}");
+    }
 
     var app = ServerHost.Build(new ServerHostSettings(
         IPAddress.Loopback, port, token, log, new FileToolsOptions(AnsiCodePage.Current),

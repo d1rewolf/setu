@@ -12,7 +12,7 @@ public static class KeepAwake
     private static readonly Lock Gate = new();
     private static bool _started;
 
-    /// <summary>Idempotent. Throws Win32Exception if Windows rejects the request.</summary>
+    /// <summary>Idempotent. Throws Win32Exception (or InvalidOperationException when Windows gives no error code) if Windows rejects the request.</summary>
     public static void Start()
     {
         lock (Gate)
@@ -38,7 +38,13 @@ public static class KeepAwake
             thread.Start();
             ready.Wait();
 
-            if (error is { } code) throw new Win32Exception(code, "Could not keep the machine awake (SetThreadExecutionState failed)");
+            if (error is { } code)
+            {
+                const string message = "Could not keep the machine awake (SetThreadExecutionState failed)";
+                // Error code 0 would make Win32Exception say "The operation completed successfully".
+                if (code == 0) throw new InvalidOperationException(message);
+                throw new Win32Exception(code, $"{message}: {new Win32Exception(code).Message}");
+            }
             _started = true;
         }
     }
