@@ -25,10 +25,10 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
                 var flags = string.Join(",", new[] { w.Minimized ? "min" : null, w.Foreground ? "fg" : null }.OfType<string>());
                 sb.Append(w.Handle.ToString(Inv)).Append('\t')
                   .Append(w.Pid.ToString(Inv)).Append('\t')
-                  .Append(w.ProcessName).Append('\t')
+                  .Append(OneField(w.ProcessName)).Append('\t')
                   .Append(Inv, $"{w.X},{w.Y},{w.Width},{w.Height}").Append('\t')
                   .Append(flags).Append('\t')
-                  .Append(w.Title).Append('\n');
+                  .Append(OneField(w.Title)).Append('\n');
             }
             return sb.ToString();
         });
@@ -45,7 +45,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
             var parsed = ParseTarget(target);
             var cap = desktop.Capture(parsed, max_width);
             var header = string.Create(Inv,
-                $"origin=({cap.OriginX},{cap.OriginY}) scale={cap.Scale:0.####} size={cap.PixelWidth}x{cap.PixelHeight}; screen_x = origin_x + image_x / scale");
+                $"origin=({cap.OriginX},{cap.OriginY}) scale={cap.Scale:0.######} size={cap.PixelWidth}x{cap.PixelHeight}; screen_x = origin_x + image_x / scale");
             return (IEnumerable<ContentBlock>)new ContentBlock[]
             {
                 new TextContentBlock { Text = header },
@@ -114,6 +114,13 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
             if (!desktop.FocusWindow(handle))
                 throw new McpException($"Windows refused to bring {handle} to the foreground");
             return "Focused";
+        });
+
+    /// <summary>A tab or line break in a title would break the one-line, tab-separated format.</summary>
+    private static string OneField(string value) =>
+        string.Create(value.Length, value, static (span, v) =>
+        {
+            for (var i = 0; i < v.Length; i++) span[i] = char.IsControl(v[i]) ? ' ' : v[i];
         });
 
     private void RequireAvailable()

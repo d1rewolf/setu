@@ -190,6 +190,19 @@ public sealed class ServerHostTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ShellTools_CancellationToken_NotInInputSchema()
+    {
+        await using var client = await Connect();
+        var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+        foreach (var name in new[] { "powershell", "cmd" })
+        {
+            var schema = tools.Single(t => t.Name == name).JsonSchema.GetRawText();
+            Assert.Contains("\"command\"", schema);
+            Assert.DoesNotContain("ancellation", schema);
+        }
+    }
+
+    [Fact]
     public async Task ToolError_ReachesClientWithPlainMessage()
     {
         await using var client = await Connect();

@@ -13,20 +13,22 @@ public sealed class ShellTools(RequestLog log, IProcessRunner runner, IDetachedL
     private const string TruncatedMarker = "[truncated at 64 KiB]\n";
 
     [McpServerTool(Name = "powershell")]
-    [Description("Runs a Windows PowerShell command and waits for it to finish. Non-interactive: anything that waits for input fails instead of waiting. On timeout the command and everything it started is killed and the partial output is returned. Output is capped at 64 KiB per stream. To launch a GUI app that should keep running, use start_process instead.")]
+    [Description("Runs a Windows PowerShell command and waits for it to finish. Non-interactive: anything that waits for input fails instead of waiting. On timeout the command and everything it started is killed and the partial output is returned. Output is capped at 64 KiB per stream. Programs this command starts may be stopped when the server restarts; use start_process for apps that must keep running.")]
     public Task<string> PowerShell(
         [Description("PowerShell script text.")] string command,
         [Description("Optional absolute working directory. %VARS% are expanded.")] string? cwd = null,
-        [Description("Timeout in seconds, 1 to 600.")] int timeout_s = 60)
-        => Run("powershell", "powershell.exe", CommandLines.PowerShell(command), cwd, timeout_s);
+        [Description("Timeout in seconds, 1 to 600.")] int timeout_s = 60,
+        CancellationToken cancellationToken = default)
+        => Run("powershell", "powershell.exe", CommandLines.PowerShell(command), cwd, timeout_s, ClixmlDecoder.Decode, cancellationToken);
 
     [McpServerTool(Name = "cmd")]
-    [Description("Runs a cmd.exe command line and waits for it to finish. Non-interactive: anything that waits for input fails instead of waiting. On timeout the command and everything it started is killed and the partial output is returned. Output is capped at 64 KiB per stream. To launch a GUI app that should keep running, use start_process instead.")]
+    [Description("Runs a cmd.exe command line and waits for it to finish. Non-interactive: anything that waits for input fails instead of waiting. On timeout the command and everything it started is killed and the partial output is returned. Output is capped at 64 KiB per stream. Programs this command starts may be stopped when the server restarts; use start_process for apps that must keep running.")]
     public Task<string> Cmd(
         [Description("cmd.exe command line.")] string command,
         [Description("Optional absolute working directory. %VARS% are expanded.")] string? cwd = null,
-        [Description("Timeout in seconds, 1 to 600.")] int timeout_s = 60)
-        => Run("cmd", "cmd.exe", CommandLines.Cmd(command), cwd, timeout_s);
+        [Description("Timeout in seconds, 1 to 600.")] int timeout_s = 60,
+        CancellationToken cancellationToken = default)
+        => Run("cmd", "cmd.exe", CommandLines.Cmd(command), cwd, timeout_s, static text => text, cancellationToken);
 
     [McpServerTool(Name = "start_process")]
     [Description("Starts a program in the user's desktop session and returns its PID without waiting for it. Use this, not powershell Start-Process or cmd start, for GUI apps or anything you want to keep running after the call returns.")]
@@ -42,7 +44,13 @@ public sealed class ShellTools(RequestLog log, IProcessRunner runner, IDetachedL
             return $"Started {path} as PID {pid}";
         });
 
-    private Task<string> Run(string tool, string fileName, string arguments, string? cwd, int timeoutSeconds)
+    /// <summary>
+    /// The SDK binds <paramref name="ct"/> to the request (it is not part of the tool's input schema), so a
+    /// call the client abandons kills the command and everything it started.
+    /// </summary>
+    private Task<string> Run(
+        string tool, string fileName, string arguments, string? cwd, int timeoutSeconds,
+        Func<string, string> decode, CancellationToken ct)
         => ToolGuard.RunAsync(log, tool, async () =>
         {
             if (timeoutSeconds is < MinTimeoutSeconds or > MaxTimeoutSeconds)
@@ -50,8 +58,9 @@ public sealed class ShellTools(RequestLog log, IProcessRunner runner, IDetachedL
             var dir = cwd is null ? null : PathResolver.Resolve(cwd);
             var result = await runner.RunAsync(
                 new ProcessRequest(fileName, arguments, dir, TimeSpan.FromSeconds(timeoutSeconds)),
-                CancellationToken.None);
-            return Format(result);
+                ct);
+            // Decoding after the cap only ever shortens the text, so the 64 KiB bound still holds.
+            return Format(result with { Stdout = decode(result.Stdout), Stderr = decode(result.Stderr) });
         });
 
     private static string Format(ProcessResult r)

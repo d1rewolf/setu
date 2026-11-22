@@ -124,6 +124,13 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 new_string = LoneLf.Replace(new_string, "\r\n");
             }
 
+            // A byte-level match in a multi-byte ANSI code page (932, 936, 949, 950...) can start on the trail
+            // byte of a double-byte character and corrupt the file, so only single-byte code pages are edited.
+            if (format.Kind == FileEncodingKind.Ansi && !StrictEncoding(format.Kind).IsSingleByte)
+                throw new ToolInputException(
+                    $"edit_file cannot safely edit this file: it is in the ANSI code page {options.AnsiCodePage}, which uses double-byte characters. " +
+                    "Read it with read_file and write the whole file back with write_file instead.");
+
             var enc = StrictEncoding(format.Kind);
             byte[] oldBytes, newBytes;
             try
@@ -237,7 +244,9 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 return true;
             }
 
-            var options2 = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+            // AttributesToSkip = 0: Hidden and System files and directories (such as AppData) are searched too,
+            // as list_dir shows them.
+            var options2 = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
             foreach (var file in Directory.EnumerateFiles(full, "*", options2))
             {
                 if (!string.IsNullOrEmpty(name_pattern)

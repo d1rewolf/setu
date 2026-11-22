@@ -207,6 +207,30 @@ public sealed class FileToolsListSearchTests : IDisposable
     }
 
     [Fact]
+    public void Search_HiddenDirsAndFiles_Included()
+    {
+        // .NET treats dot-names as Hidden on Unix; on Windows set the attribute explicitly.
+        var hiddenDir = Directory.CreateDirectory(P(".appdata"));
+        var inHidden = Path.Combine(hiddenDir.FullName, "found.log");
+        File.WriteAllText(inHidden, "needle\n");
+        var hiddenFile = P(".secret.log");
+        File.WriteAllText(hiddenFile, "needle\n");
+        if (OperatingSystem.IsWindows())
+        {
+            hiddenDir.Attributes |= FileAttributes.Hidden;
+            File.SetAttributes(hiddenFile, File.GetAttributes(hiddenFile) | FileAttributes.Hidden);
+        }
+        Assert.True((hiddenDir.Attributes & FileAttributes.Hidden) != 0);
+
+        var byName = Tools().Search(_dir, name_pattern: "*.log");
+        Assert.Contains(inHidden, byName);
+        Assert.Contains(hiddenFile, byName);
+        var byContent = Tools().Search(_dir, content_regex: "needle");
+        Assert.Contains($"{inHidden}:1: needle", byContent);
+        Assert.Contains($"{hiddenFile}:1: needle", byContent);
+    }
+
+    [Fact]
     public void Search_NoMatches_SaysSo()
     {
         Touch("a.txt", DateTime.Now, "x\n");

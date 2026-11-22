@@ -55,6 +55,14 @@ public sealed class ScreenToolsTests
     }
 
     [Fact]
+    public void ListWindows_ControlCharsInTitleAndProcess_BecomeSpaces()
+    {
+        var (t, d) = Make();
+        d.Windows = [new(100, "a\tb\r\nc\u0001d", "no\ttepad", 12, 10, 20, 800, 600, false, false)];
+        Assert.Equal("100\t12\tno tepad\t10,20,800,600\t\ta b  c d\n", t.ListWindows());
+    }
+
+    [Fact]
     public void ListWindows_NoWindows_SaysSo()
     {
         var (t, _) = Make();
@@ -74,6 +82,15 @@ public sealed class ScreenToolsTests
         Assert.Equal("image/png", img.MimeType);
         Assert.Equal(new byte[] { 9, 8, 7 }, img.DecodedData.ToArray());
         Assert.IsType<ScreenTarget>(d.LastCapture!.Value.Target);
+    }
+
+    [Fact]
+    public void Screenshot_ScaleHasSixDecimals()
+    {
+        var (t, d) = Make();
+        d.NextCapture = new([1], 0, 0, 1000, 500, 1000.0 / 2561);
+        var text = Assert.IsType<TextContentBlock>(t.Screenshot().First());
+        Assert.StartsWith("origin=(0,0) scale=0.390472 size=1000x500;", text.Text);
     }
 
     [Fact]

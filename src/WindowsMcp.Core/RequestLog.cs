@@ -4,6 +4,9 @@ public sealed class RequestLog
 {
     public static RequestLog Null { get; } = new();
 
+    private static readonly System.Text.RegularExpressions.Regex ControlRuns =
+        new(@"\p{Cc}+", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
     private readonly string? _path;
     private readonly object _gate = new();
 
@@ -14,7 +17,8 @@ public sealed class RequestLog
     public void Write(string line)
     {
         if (_path is null) return;
-        var text = $"{DateTimeOffset.Now:O} {line}{Environment.NewLine}";
+        // One call, one log line: a line break or other control character in a message would split it.
+        var text = $"{DateTimeOffset.Now:O} {ControlRuns.Replace(line, " ")}{Environment.NewLine}";
         try
         {
             lock (_gate) File.AppendAllText(_path, text);

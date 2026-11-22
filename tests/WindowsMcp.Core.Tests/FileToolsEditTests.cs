@@ -46,6 +46,20 @@ public sealed class FileToolsEditTests : IDisposable
     }
 
     [Fact]
+    public void Edit_AnsiFileOnDoubleByteCodePage_RefusedWithoutWriting()
+    {
+        var path = P("sjis.txt");
+        // Shift-JIS katakana A (0x83 0x41) then 'a'. A 1-byte search for "A" (0x41) would hit its trail byte.
+        byte[] before = [0x83, 0x41, 0x61];
+        File.WriteAllBytes(path, before);
+        var tools = new FileTools(RequestLog.Null, new FileToolsOptions(932));
+        var ex = Assert.Throws<McpException>(() => tools.EditFile(path, "A", "B"));
+        Assert.Contains("932", ex.Message);
+        Assert.Contains("write_file", ex.Message);
+        Assert.Equal(before, File.ReadAllBytes(path));
+    }
+
+    [Fact]
     public void Edit_Utf16Le_EditsAndKeepsEncoding()
     {
         var path = P("u16.txt");
