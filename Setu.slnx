@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Setu.Core/Setu.Core.csproj" />
+    <Project Path="src/Setu.Win32/Setu.Win32.csproj" />
+    <Project Path="src/Setu/Setu.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Setu.Core.Tests/Setu.Core.Tests.csproj" />
+    <Project Path="tests/Setu.Smoke/Setu.Smoke.csproj" />
+  </Folder>
+</Solution>

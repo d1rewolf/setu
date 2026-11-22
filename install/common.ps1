@@ -1,12 +1,12 @@
 # Shared helpers, dot-sourced by install.ps1 and update.ps1. Not run on its own.
 Set-StrictMode -Version Latest
 
-$taskName  = 'windows-mcp'
-$progDir   = Join-Path $env:LOCALAPPDATA 'Programs\windows-mcp'
-$dest      = Join-Path $progDir 'windows-mcp.exe'
-$dataDir   = Join-Path $env:LOCALAPPDATA 'windows-mcp'
+$taskName  = 'setu'
+$progDir   = Join-Path $env:LOCALAPPDATA 'Programs\setu'
+$dest      = Join-Path $progDir 'setu.exe'
+$dataDir   = Join-Path $env:LOCALAPPDATA 'setu'
 $tokenFile = Join-Path $dataDir 'token'
-$logFile   = Join-Path $dataDir 'windows-mcp.log'
+$logFile   = Join-Path $dataDir 'setu.log'
 # Printed when the server does not come up in time: the logon task never starts without a desktop session.
 $sessionHint = "Are you logged on at the VM's desktop? The task only runs in your interactive session."
 
@@ -25,7 +25,7 @@ function Get-McpPort {
 }
 
 function Get-McpProcess {
-    return @(Get-Process -Name 'windows-mcp' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $dest })
+    return @(Get-Process -Name 'setu' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $dest })
 }
 
 function Stop-McpProcess {
@@ -53,7 +53,7 @@ function Test-Listening([int]$Port) {
 # Succeeds only when OUR process is running and the port accepts connections.
 # On timeout prints the log tail and throws.
 function Wait-McpReady([int]$Port, [int]$Seconds = 15) {
-    Write-Host "Waiting for windows-mcp to listen on 127.0.0.1:$Port..."
+    Write-Host "Waiting for setu to listen on 127.0.0.1:$Port..."
     $deadline = (Get-Date).AddSeconds($Seconds)
     $ready = $false
     while (-not $ready -and (Get-Date) -lt $deadline) {
@@ -61,12 +61,12 @@ function Wait-McpReady([int]$Port, [int]$Seconds = 15) {
         if (-not $ready) { Start-Sleep -Milliseconds 500 }
     }
     if (-not $ready) {
-        Write-Warning "windows-mcp is not running and listening on port $Port after $Seconds seconds."
+        Write-Warning "setu is not running and listening on port $Port after $Seconds seconds."
         Write-Host $sessionHint
         if (Test-Path -LiteralPath $logFile) {
             Write-Host "Last lines of ${logFile}:"
             Get-Content -LiteralPath $logFile -Tail 15
         }
-        throw 'windows-mcp did not come up. See the log lines above.'
+        throw 'setu did not come up. See the log lines above.'
     }
 }

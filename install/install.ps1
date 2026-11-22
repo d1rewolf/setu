@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  Installs windows-mcp for the current user and starts it. No admin rights needed.
+  Installs setu for the current user and starts it. No admin rights needed.
 .PARAMETER Exe
-  Path to the windows-mcp.exe to install.
+  Path to the setu.exe to install.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Exe
@@ -55,23 +55,23 @@ if (-not (Test-Path -LiteralPath $tokenFile)) {
         Write-Host "Last lines of ${logFile}:"
         Get-Content -LiteralPath $logFile -Tail 15
     }
-    throw 'windows-mcp did not start. See the log lines above.'
+    throw 'setu did not start. See the log lines above.'
 }
 
 $port = Get-McpPort
 Wait-McpReady $port
 Write-Host ''
-Write-Host 'windows-mcp is installed and running.'
+Write-Host 'setu is installed and running.'
 Write-Host "Port: $port"
 Write-Host 'Read the token from your Linux machine with:'
-Write-Host "  ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token'"
+Write-Host "  ssh user@vm 'type %LOCALAPPDATA%\setu\token'"
 Write-Host 'Or in this window:'
 Write-Host "  type $tokenFile"
 
 $sshd = Get-Service -Name sshd -ErrorAction SilentlyContinue
 if ((-not $sshd) -or ($sshd.Status -ne 'Running')) {
     Write-Host ''
-    Write-Warning 'OpenSSH Server (sshd) is missing or not running, so you cannot reach windows-mcp from Linux yet.'
+    Write-Warning 'OpenSSH Server (sshd) is missing or not running, so you cannot reach setu from Linux yet.'
     Write-Host 'In an elevated (Administrator) PowerShell, run:'
     Write-Host '  Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0'
     Write-Host '  Set-Service sshd -StartupType Automatic'

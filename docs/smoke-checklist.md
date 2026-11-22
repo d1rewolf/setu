@@ -1,6 +1,6 @@
 # Smoke test and VM checklist
 
-This is the first real run of windows-mcp on the Windows machine. The smoke client checks most things for you. This page covers the rest: things only a person can look at, or that cannot be automated. Work through it top to bottom and fill in the results table at the end.
+This is the first real run of setu on the Windows machine. The smoke client checks most things for you. This page covers the rest: things only a person can look at, or that cannot be automated. Work through it top to bottom and fill in the results table at the end.
 
 Replace `user@vm` with your Windows login and address. The commands for the install, token and tunnel are in [connecting.md](connecting.md).
 
@@ -8,16 +8,16 @@ Replace `user@vm` with your Windows login and address. The commands for the inst
 
 1. Take a snapshot of the VM, so you can roll back.
 2. Build, copy and install as in [connecting.md](connecting.md) steps 1 to 3.
-3. **Defender and SmartScreen.** After the install, confirm `%LOCALAPPDATA%\Programs\windows-mcp\windows-mcp.exe` is still there and was not quarantined or blocked. Success: the install script says "windows-mcp is installed and running". If Defender or SmartScreen removes or blocks the exe, note it in the table. Code signing then becomes a follow-up.
-4. **No console window at logon.** Log off and back on (or restart the task). Success: windows-mcp is running (check Task Manager) and no black console window appeared.
+3. **Defender and SmartScreen.** After the install, confirm `%LOCALAPPDATA%\Programs\setu\setu.exe` is still there and was not quarantined or blocked. Success: the install script says "setu is installed and running". If Defender or SmartScreen removes or blocks the exe, note it in the table. Code signing then becomes a follow-up.
+4. **No console window at logon.** Log off and back on (or restart the task). Success: setu is running (check Task Manager) and no black console window appeared.
 5. **Second start exits with code 2.** While it is running, start a second copy by hand:
    ```
-   ssh user@vm 'powershell -NoProfile -Command "$p = Start-Process \"$env:LOCALAPPDATA\Programs\windows-mcp\windows-mcp.exe\" -Wait -PassThru; \"exit=\" + $p.ExitCode"'
+   ssh user@vm 'powershell -NoProfile -Command "$p = Start-Process \"$env:LOCALAPPDATA\Programs\setu\setu.exe\" -Wait -PassThru; \"exit=\" + $p.ExitCode"'
    ```
-   Success: it returns straight away with `exit=2`, and the log (`%LOCALAPPDATA%\windows-mcp\windows-mcp.log`) ends with the line `startup failed: windows-mcp is already running for this user.` This copy runs in the SSH session, not on your desktop, so it also proves the check works across sessions.
+   Success: it returns straight away with `exit=2`, and the log (`%LOCALAPPDATA%\setu\setu.log`) ends with the line `startup failed: setu is already running for this user.` This copy runs in the SSH session, not on your desktop, so it also proves the check works across sessions.
 6. Read the token and open the tunnel ([connecting.md](connecting.md) steps 4 and 5). Save the token to a file only you can read:
    ```
-   (umask 077; ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token' > /tmp/wmcp.token)
+   (umask 077; ssh user@vm 'type %LOCALAPPDATA%\setu\token' > /tmp/wmcp.token)
    ```
    Delete it when you are done: `rm /tmp/wmcp.token`.
 
@@ -26,7 +26,7 @@ Replace `user@vm` with your Windows login and address. The commands for the inst
 Be logged on at the VM's desktop and leave it alone while this runs. It opens Notepad and types into it, and it overwrites the VM clipboard (it copies the typed text to check it).
 
 ```
-dotnet run --project tests/WindowsMcp.Smoke -- --url http://127.0.0.1:47631/mcp --token-file /tmp/wmcp.token
+dotnet run --project tests/Setu.Smoke -- --url http://127.0.0.1:47631/mcp --token-file /tmp/wmcp.token
 ```
 
 Success: every line starts with `PASS`, the last line is `All checks passed.`, and the exit code is 0. A failure prints `FAIL <name>: <why>`. To rerun one check, add `--only <name>`.
@@ -50,13 +50,13 @@ Use any MCP client for these, for example Claude Code connected as in [connectin
 
 **Restart after a crash.** The scheduled task is set to restart the server up to 999 times, one minute apart, if it fails. Kill it over SSH:
 ```
-ssh user@vm 'powershell -NoProfile -Command "Stop-Process -Name windows-mcp -Force"'
+ssh user@vm 'powershell -NoProfile -Command "Stop-Process -Name setu -Force"'
 ```
 Then check every 30 seconds or so, for up to about 2 minutes, whether it is back:
 ```
-ssh user@vm 'powershell -NoProfile -Command "Get-Process windows-mcp -ErrorAction SilentlyContinue; Get-Content (Join-Path $env:LOCALAPPDATA windows-mcp\windows-mcp.log) -Tail 3"'
+ssh user@vm 'powershell -NoProfile -Command "Get-Process setu -ErrorAction SilentlyContinue; Get-Content (Join-Path $env:LOCALAPPDATA setu\setu.log) -Tail 3"'
 ```
-Success: a `windows-mcp` process is listed again, and the log has a new `listening on http://127.0.0.1:...` line with a time after the kill. Reopen the tunnel if needed and confirm a `list_dir` call works. Record how long it took. If it has not come back after 2 minutes, record FAIL: Task Scheduler does not treat a killed process as a failure to restart, and the follow-up is to add a repeating trigger (for example every 5 minutes; the task already ignores a new start while one is running). Start it again by hand with `ssh user@vm schtasks /run /tn windows-mcp`.
+Success: a `setu` process is listed again, and the log has a new `listening on http://127.0.0.1:...` line with a time after the kill. Reopen the tunnel if needed and confirm a `list_dir` call works. Record how long it took. If it has not come back after 2 minutes, record FAIL: Task Scheduler does not treat a killed process as a failure to restart, and the follow-up is to add a repeating trigger (for example every 5 minutes; the task already ignores a new start while one is running). Start it again by hand with `ssh user@vm schtasks /run /tn setu`.
 
 **Locked screen.**
 1. Call `powershell` with `rundll32 user32.dll,LockWorkStation`.
@@ -79,7 +79,7 @@ Success: a `windows-mcp` process is listed again, and the log has a new `listeni
 `start_process` first tries CreateProcess with breakaway, and falls back to WMI if Windows denies that. Every call logs a `start_process NNms ok` line, but only the fallback mentions WMI. On the VM:
 
 ```
-ssh user@vm 'findstr /c:"WMI" "%LOCALAPPDATA%\windows-mcp\windows-mcp.log"'
+ssh user@vm 'findstr /c:"WMI" "%LOCALAPPDATA%\setu\setu.log"'
 ```
 
 The single quotes keep the quotes and backslashes intact on the way through your Linux shell, so the path works even if it contains spaces.

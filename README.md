@@ -1,6 +1,6 @@
-# windows-mcp
+# Setu
 
-An MCP server that runs on a Windows machine, in your logged-on desktop session, and lets an agent on another machine (for example Claude Code on Linux) work on it. The agent can read and edit files, run PowerShell and cmd commands, start programs, and see and drive the screen.
+Setu (सेतु, Sanskrit for "bridge") is an MCP server that runs on a Windows machine, in your logged-on desktop session, and lets an agent on another machine (for example Claude Code on Linux) work on it. The agent can read and edit files, run PowerShell and cmd commands, start programs, and see and drive the screen.
 
 It listens on `127.0.0.1` only and requires a bearer token on every request. You reach it from the agent's machine through an SSH tunnel (`ssh -L`), so nothing is exposed to the network. It starts at logon through a Task Scheduler task and needs no admin rights to install.
 
@@ -35,17 +35,17 @@ Needs the .NET 10 SDK (pinned in `global.json`). Everything builds on Linux too.
 ```
 dotnet build
 dotnet test
-dotnet publish src/WindowsMcp -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/win-x64
+dotnet publish src/Setu -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/win-x64
 ```
 
-The last command produces `publish/win-x64/windows-mcp.exe`, a single file with no runtime to install. The tests that need Windows only run on Windows.
+The last command produces `publish/win-x64/setu.exe`, a single file with no runtime to install. The tests that need Windows only run on Windows.
 
 ## Install, update, uninstall
 
 The PowerShell scripts are in `install/` and run as your normal Windows user:
 
-- `install.ps1 -Exe <path>` copies the exe to `%LOCALAPPDATA%\Programs\windows-mcp`, registers the logon task, starts it, and checks for OpenSSH Server.
+- `install.ps1 -Exe <path>` copies the exe to `%LOCALAPPDATA%\Programs\setu`, registers the logon task, starts it, and checks for OpenSSH Server.
 - `update.ps1 -Exe <path>` stops it, swaps in the new exe, and starts it again.
-- `uninstall.ps1` removes the task and program. It keeps the token, config and log in `%LOCALAPPDATA%\windows-mcp` unless you add `-RemoveData`.
+- `uninstall.ps1` removes the task and program. It keeps the token, config and log in `%LOCALAPPDATA%\setu` unless you add `-RemoveData`.
 
-Settings: the port defaults to 47631 and can be changed with `{"port": 12345}` in `%LOCALAPPDATA%\windows-mcp\config.json`. The log is `%LOCALAPPDATA%\windows-mcp\windows-mcp.log`.
+Settings: the port defaults to 47631 and can be changed with `{"port": 12345}` in `%LOCALAPPDATA%\setu\config.json`. The log is `%LOCALAPPDATA%\setu\setu.log`.

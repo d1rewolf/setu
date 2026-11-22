@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Stops and removes windows-mcp. Keeps the token, config and log unless -RemoveData is given.
+  Stops and removes setu. Keeps the token, config and log unless -RemoveData is given.
 #>
 param(
     [switch]$RemoveData
@@ -9,10 +9,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$taskName = 'windows-mcp'
-$progDir  = Join-Path $env:LOCALAPPDATA 'Programs\windows-mcp'
-$dest     = Join-Path $progDir 'windows-mcp.exe'
-$dataDir  = Join-Path $env:LOCALAPPDATA 'windows-mcp'
+$taskName = 'setu'
+$progDir  = Join-Path $env:LOCALAPPDATA 'Programs\setu'
+$dest     = Join-Path $progDir 'setu.exe'
+$dataDir  = Join-Path $env:LOCALAPPDATA 'setu'
 
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
@@ -22,7 +22,7 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     Write-Host "No scheduled task '$taskName' found."
 }
 
-$procs = @(Get-Process -Name 'windows-mcp' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $dest })
+$procs = @(Get-Process -Name 'setu' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $dest })
 foreach ($p in $procs) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 foreach ($p in $procs) { $null = $p.WaitForExit(5000) }
 

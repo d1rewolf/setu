@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  Replaces the installed windows-mcp.exe with a new build and restarts it.
+  Replaces the installed setu.exe with a new build and restarts it.
 .PARAMETER Exe
-  Path to the new windows-mcp.exe.
+  Path to the new setu.exe.
 #>
 param(
     [Parameter(Mandatory = $true)][string]$Exe
@@ -21,7 +21,7 @@ $src = (Resolve-Path -LiteralPath $Exe).Path
 
 Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 
-Write-Host 'Waiting for windows-mcp to exit...'
+Write-Host 'Waiting for setu to exit...'
 $deadline = (Get-Date).AddSeconds(10)
 while (@(Get-McpProcess).Count -gt 0 -and (Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 250
@@ -40,4 +40,4 @@ Start-ScheduledTask -TaskName $taskName
 
 $port = Get-McpPort
 Wait-McpReady $port
-Write-Host "windows-mcp is updated and listening on 127.0.0.1:$port."
+Write-Host "setu is updated and listening on 127.0.0.1:$port."
