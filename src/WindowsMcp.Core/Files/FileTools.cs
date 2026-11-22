@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using System.Text.RegularExpressions;
 using ModelContextProtocol.Server;
 
 namespace WindowsMcp.Core.Files;
@@ -95,6 +96,52 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             AtomicWriter.Write(full, bytes);
             return $"Wrote {bytes.Length} bytes to {path} ({kind}, {(crlf ? LineEndings.Crlf : LineEndings.Lf)})";
         });
+
+    [McpServerTool(Name = "edit_file")]
+    [Description("Replaces an exact string in a text file. The file keeps its encoding, BOM and line endings, and bytes outside the replaced text are unchanged. old_string must match exactly once unless replace_all is true.")]
+    public string EditFile(
+        [Description("Absolute Windows path. %VARS% are expanded.")] string path,
+        [Description("Exact text to find. Must not be empty. On a CRLF file, \\n is treated as \\r\\n.")] string old_string,
+        [Description("Replacement text. On a CRLF file, \\n is written as \\r\\n.")] string new_string,
+        [Description("Replace every occurrence instead of requiring exactly one.")] bool replace_all = false)
+        => ToolGuard.Run(log, "edit_file", () =>
+        {
+            if (old_string.Length == 0) throw new ToolInputException("old_string must not be empty");
+            var full = PathResolver.Resolve(path);
+            var bytes = ReadAllShared(full);
+            if (TextFormat.LooksBinary(bytes))
+                throw new ToolInputException($"Binary file; edit_file only edits text: {path}");
+
+            var format = TextFormat.Detect(bytes, options.AnsiCodePage);
+            if (format.LineEndings == LineEndings.Crlf)
+            {
+                old_string = LoneLf.Replace(old_string, "\r\n");
+                new_string = LoneLf.Replace(new_string, "\r\n");
+            }
+
+            var enc = StrictEncoding(format.Kind);
+            byte[] oldBytes, newBytes;
+            try
+            {
+                oldBytes = enc.GetBytes(old_string);
+                newBytes = enc.GetBytes(new_string);
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ToolInputException($"Text cannot be represented in {format.Kind}");
+            }
+
+            var alignment = format.Kind is FileEncodingKind.Utf16Le or FileEncodingKind.Utf16Be ? 2 : 1;
+            var result = ByteSplice.Replace(bytes, oldBytes, newBytes, format.PreambleLength, alignment, replace_all, out var count);
+            if (count == 0) throw new ToolInputException($"old_string not found in {path}");
+            if (count > 1 && !replace_all)
+                throw new ToolInputException($"old_string found {count} times; pass more context or replace_all=true");
+
+            AtomicWriter.Write(full, result);
+            return $"Replaced {count} occurrence(s) in {path}";
+        });
+
+    private static readonly Regex LoneLf = new(@"(?<!\r)\n", RegexOptions.CultureInvariant);
 
     private Encoding StrictEncoding(FileEncodingKind kind)
     {
