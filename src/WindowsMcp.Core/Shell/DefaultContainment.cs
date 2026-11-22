@@ -2,7 +2,8 @@ using System.Diagnostics;
 
 namespace WindowsMcp.Core.Shell;
 
-/// <summary>Kills the attached process and all its descendants on KillAll. Dispose kills nothing.</summary>
+/// <summary>Kills the attached processes and all their descendants on KillAll (best effort, never throws for
+/// processes that cannot be killed). Dispose kills nothing.</summary>
 public sealed class DefaultContainment : IProcessContainment
 {
     private readonly List<Process> _processes = [];
@@ -25,6 +26,11 @@ public sealed class DefaultContainment : IProcessContainment
             catch (InvalidOperationException)
             {
                 // Already exited.
+            }
+            catch (Exception ex) when (ex is AggregateException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                // Best effort: part of the tree could not be killed (access denied, exiting, protected).
+                // Keep going so the remaining attached processes are still killed.
             }
         }
     }

@@ -8,6 +8,7 @@ public sealed class ProcessRunnerTests : IDisposable
     // Unique marker durations so cleanup only touches processes these tests started.
     private const string TreeMarker = "sleep 30.123";
     private const string BackgroundMarker = "sleep 30.456";
+    private const string ThrowingKillMarker = "sleep 30.789";
 
     private static readonly ProcessRunner Runner = new(() => new DefaultContainment());
 
@@ -16,6 +17,24 @@ public sealed class ProcessRunnerTests : IDisposable
         if (OperatingSystem.IsWindows()) return;
         Pkill(TreeMarker);
         Pkill(BackgroundMarker);
+        Pkill(ThrowingKillMarker);
+    }
+
+    /// <summary>Kills the tree like DefaultContainment, then throws the way Kill(entireProcessTree) can.</summary>
+    private sealed class ThrowingContainment : IProcessContainment
+    {
+        private Process? _process;
+
+        public void Attach(Process p) => _process = p;
+
+        public void KillAll()
+        {
+            _process?.Kill(entireProcessTree: true);
+            throw new AggregateException("Not all processes in the process tree could be terminated.",
+                new System.ComponentModel.Win32Exception(5, "Access is denied."));
+        }
+
+        public void Dispose() { }
     }
 
     private static Task<ProcessResult> Sh(string script, double timeoutSeconds = 10) =>
@@ -127,5 +146,20 @@ public sealed class ProcessRunnerTests : IDisposable
         {
             Directory.Delete(dir, true);
         }
+    }
+
+    [Fact]
+    public async Task Run_Timeout_KillAllThrows_StillReturnsTimedOutWithPartialOutput()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "uses /bin/sh");
+        var runner = new ProcessRunner(() => new ThrowingContainment());
+        var sw = Stopwatch.StartNew();
+        var r = await runner.RunAsync(
+            new ProcessRequest("/bin/sh", $"-c \"echo partial; {ThrowingKillMarker}\"", null, TimeSpan.FromSeconds(1)),
+            TestContext.Current.CancellationToken);
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(4), $"took {sw.Elapsed}");
+        Assert.True(r.TimedOut);
+        Assert.Null(r.ExitCode);
+        Assert.Equal("partial\n", r.Stdout);
     }
 }

@@ -74,7 +74,7 @@ public sealed class ProcessRunner(Func<IProcessContainment> containment) : IProc
             waitCts.Cancel();
             if (first != exited.Task)
             {
-                contained.KillAll();
+                KillBestEffort(contained);
                 ct.ThrowIfCancellationRequested();
                 timedOut = true;
             }
@@ -97,6 +97,22 @@ public sealed class ProcessRunner(Func<IProcessContainment> containment) : IProc
         _ = pumps.ContinueWith(_ => process.Dispose(), TaskScheduler.Default);
 
         return new ProcessResult(exitCode, outText, errText, timedOut, outTrunc, errTrunc, sw.Elapsed);
+    }
+
+    /// <summary>
+    /// A timed-out command is a normal result: whatever containment throws while killing must not
+    /// turn it into an error or lose the partial output.
+    /// </summary>
+    private static void KillBestEffort(IProcessContainment contained)
+    {
+        try
+        {
+            contained.KillAll();
+        }
+        catch (Exception)
+        {
+            // Best effort: the result still reports TimedOut with the output read so far.
+        }
     }
 
     private static async Task Pump(StreamReader reader, CappedBuffer buffer)
