@@ -35,6 +35,23 @@ public sealed class TokenStoreTests : IDisposable
     }
 
     [Fact]
+    public void TokenStore_EmptyFile_Regenerates()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "token"), "  \n");
+        var token = new TokenStore(_dir, new UnixTokenFileProtector()).GetOrCreate();
+        Assert.Equal(32, Base64Url.DecodeFromChars(token).Length);
+        Assert.Equal(token, File.ReadAllText(Path.Combine(_dir, "token")));
+    }
+
+    [Fact]
+    public void BearerAuth_EmptyToken_Refused()
+    {
+        var app = Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder().Build();
+        Assert.Throws<ArgumentException>(() => app.UseBearerAuth("", RequestLog.Null));
+    }
+
+    [Fact]
     public void TokenStore_FileIsUserOnly()
     {
         if (OperatingSystem.IsWindows())

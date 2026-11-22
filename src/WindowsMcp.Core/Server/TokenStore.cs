@@ -29,7 +29,11 @@ public sealed class TokenStore(string dataDirectory, ITokenFileProtector protect
     public string GetOrCreate()
     {
         if (File.Exists(TokenPath))
-            return File.ReadAllText(TokenPath).Trim();
+        {
+            var existing = File.ReadAllText(TokenPath).Trim();
+            if (existing.Length > 0) return existing;
+            // An empty token would let "Bearer " with nothing after it through; replace it.
+        }
 
         Directory.CreateDirectory(dataDirectory);
         var token = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));

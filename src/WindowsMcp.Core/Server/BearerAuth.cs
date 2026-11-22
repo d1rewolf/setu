@@ -12,6 +12,7 @@ public static class BearerAuth
     /// <summary>Rejects with 401 every request that lacks <c>Authorization: Bearer &lt;token&gt;</c>.</summary>
     public static IApplicationBuilder UseBearerAuth(this IApplicationBuilder app, string token, RequestLog log)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
         var expected = Encoding.UTF8.GetBytes(token);
         return app.Use(async (context, next) =>
         {
