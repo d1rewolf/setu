@@ -27,7 +27,9 @@ New-Item -ItemType Directory -Force -Path $progDir | Out-Null
 Copy-Item -LiteralPath $src -Destination $dest -Force
 Write-Host "Copied exe to $dest"
 
-$user = "$env:USERDOMAIN\$env:USERNAME"
+# The account name from the logon token. Over SSH, $env:USERDOMAIN can be WORKGROUP,
+# which Task Scheduler cannot map to an account.
+$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $action    = New-ScheduledTaskAction -Execute $dest
 $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $user
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
