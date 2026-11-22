@@ -21,12 +21,12 @@ ssh user@vm mkdir windows-mcp
 scp publish/win-x64/windows-mcp.exe install/*.ps1 user@vm:windows-mcp/
 ```
 
-The first line creates a `windows-mcp` folder in your Windows home folder (it prints an error if it already exists; that is fine). The second copies the exe and the three scripts into it.
+The first line creates a `windows-mcp` folder in your Windows home folder (it prints an error if it already exists; that is fine). The second copies the exe and the scripts into it (`install.ps1`, `update.ps1`, `uninstall.ps1` and `common.ps1`, which the install and update scripts load; keep all four together).
 
 ## 3. Install
 
 ```
-ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp\install.ps1 -Exe windows-mcp\windows-mcp.exe
+ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp/install.ps1 -Exe windows-mcp/windows-mcp.exe
 ```
 
 This runs as you, with no admin rights. It copies the exe to `%LOCALAPPDATA%\Programs\windows-mcp`, registers a Task Scheduler task named `windows-mcp` that starts it every time you log on, starts it now, and waits for it to create its token. Success looks like "windows-mcp is installed and running" followed by the port (47631 unless you changed it).
@@ -49,10 +49,10 @@ If the server does not start, the script prints the last lines of `%LOCALAPPDATA
 The server created a random token on first start. Read it into an environment variable on the Linux machine, so it is not left in your shell history:
 
 ```
-export WINDOWS_MCP_TOKEN=$(ssh user@vm type %LOCALAPPDATA%\\windows-mcp\\token)
+export WINDOWS_MCP_TOKEN=$(ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token')
 ```
 
-Over OpenSSH on Windows, the remote command runs in cmd by default, so `%LOCALAPPDATA%` expands to the folder on Windows. If your Windows default SSH shell is PowerShell, use `$env:LOCALAPPDATA` instead, with the dollar sign escaped for your local shell:
+The single quotes matter: they stop your Linux shell from changing the backslashes. Over OpenSSH on Windows, the remote command runs in cmd by default, so `%LOCALAPPDATA%` expands to the folder on Windows. If your Windows default SSH shell is PowerShell, use `$env:LOCALAPPDATA` instead, with the dollar sign escaped for your local shell:
 
 ```
 export WINDOWS_MCP_TOKEN=$(ssh user@vm 'type $env:LOCALAPPDATA\windows-mcp\token')
@@ -101,7 +101,7 @@ Claude Code fills in `${WINDOWS_MCP_TOKEN}` from the environment, so start it fr
 Build again (step 1), copy again (step 2), then:
 
 ```
-ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp\update.ps1 -Exe windows-mcp\windows-mcp.exe
+ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp/update.ps1 -Exe windows-mcp/windows-mcp.exe
 ```
 
 It stops the running server, replaces the exe, starts it again, and waits until it is listening. The token and config stay as they are. Your tunnel will drop connections briefly; reconnect your agent (`/mcp` in Claude Code) afterwards.
@@ -109,7 +109,7 @@ It stops the running server, replaces the exe, starts it again, and waits until 
 ## Uninstalling
 
 ```
-ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp\uninstall.ps1
+ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File windows-mcp/uninstall.ps1
 ```
 
 This removes the task and the program. It keeps `%LOCALAPPDATA%\windows-mcp` (token, config, log). Add `-RemoveData` to delete that folder too.

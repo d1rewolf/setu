@@ -11,32 +11,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$taskName = 'windows-mcp'
-$progDir  = Join-Path $env:LOCALAPPDATA 'Programs\windows-mcp'
-$dest     = Join-Path $progDir 'windows-mcp.exe'
-$dataDir  = Join-Path $env:LOCALAPPDATA 'windows-mcp'
-$tokenFile = Join-Path $dataDir 'token'
-$logFile   = Join-Path $dataDir 'windows-mcp.log'
-
-function Get-McpPort {
-    $port = 47631
-    $cfg = Join-Path $dataDir 'config.json'
-    if (Test-Path -LiteralPath $cfg) {
-        try {
-            $json = Get-Content -LiteralPath $cfg -Raw | ConvertFrom-Json
-            if ($json -and ($json.PSObject.Properties.Name -contains 'port')) { $port = [int]$json.port }
-        } catch {
-            Write-Warning "Could not read port from $cfg; using $port."
-        }
-    }
-    return $port
-}
-
-function Stop-McpProcess {
-    $procs = @(Get-Process -Name 'windows-mcp' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $dest })
-    foreach ($p in $procs) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-    foreach ($p in $procs) { $null = $p.WaitForExit(5000) }
-}
+. (Join-Path $PSScriptRoot 'common.ps1')
 
 if (-not (Test-Path -LiteralPath $Exe)) { throw "Exe not found: $Exe" }
 $src = (Resolve-Path -LiteralPath $Exe).Path
@@ -81,11 +56,12 @@ if (-not (Test-Path -LiteralPath $tokenFile)) {
 }
 
 $port = Get-McpPort
+Wait-McpReady $port
 Write-Host ''
 Write-Host 'windows-mcp is installed and running.'
 Write-Host "Port: $port"
 Write-Host 'Read the token from your Linux machine with:'
-Write-Host '  ssh user@vm type %LOCALAPPDATA%\windows-mcp\token'
+Write-Host "  ssh user@vm 'type %LOCALAPPDATA%\windows-mcp\token'"
 Write-Host 'Or in this window:'
 Write-Host "  type $tokenFile"
 
