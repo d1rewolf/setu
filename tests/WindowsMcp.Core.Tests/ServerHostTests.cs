@@ -93,6 +93,83 @@ public sealed class ServerHostTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Unauthorized_PathWithNewline_LogsOneEscapedLine()
+    {
+        using var http = new HttpClient();
+        using var res = await http.GetAsync(_baseUrl + "/a%0Ainjected%0D%0Ab", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+        var lines = File.ReadAllLines(Path.Combine(_dir, "requests.log"));
+        var line = Assert.Single(lines);
+        Assert.Contains("401 GET /a%0Ainjected%0D%0Ab", line);
+    }
+
+    [Fact]
+    public async Task Unauthorized_LongPath_IsCapped()
+    {
+        using var http = new HttpClient();
+        using var res = await http.GetAsync(_baseUrl + "/" + new string('x', 5000), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+        var line = Assert.Single(File.ReadAllLines(Path.Combine(_dir, "requests.log")));
+        Assert.True(line.Length < 300, line.Length.ToString());
+    }
+
+    [Fact]
+    public void BoundToExactlyOneLoopbackUrl()
+    {
+        var url = Assert.Single(_app.Urls);
+        Assert.StartsWith("http://127.0.0.1:", url);
+    }
+
+    [Fact]
+    public async Task KestrelEndpointsFromEnvironment_AreIgnored()
+    {
+        const string name = "Kestrel__Endpoints__Extra__Url";
+        var old = Environment.GetEnvironmentVariable(name);
+        Environment.SetEnvironmentVariable(name, "http://0.0.0.0:0");
+        WebApplication? app = null;
+        try
+        {
+            app = ServerHost.Build(new ServerHostSettings(
+                IPAddress.Loopback, 0, Token, RequestLog.Null,
+                new FileToolsOptions(1252), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop()));
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            var url = Assert.Single(app.Urls);
+            Assert.StartsWith("http://127.0.0.1:", url);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, old);
+            if (app is not null)
+            {
+                await app.StopAsync(TestContext.Current.CancellationToken);
+                await app.DisposeAsync();
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_NonLoopbackAddress_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => ServerHost.Build(new ServerHostSettings(
+            IPAddress.Any, 0, Token, RequestLog.Null,
+            new FileToolsOptions(1252), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop())));
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:5000", true)]
+    [InlineData("http://[::1]:5000", true)]
+    [InlineData("http://0.0.0.0:5000", false)]
+    [InlineData("http://[::]:5000", false)]
+    [InlineData("http://192.168.1.10:5000", false)]
+    [InlineData("http://localhost:5000", false)]
+    public void LoopbackGuard_ChecksEveryBoundAddress(string url, bool ok)
+    {
+        var urls = new[] { "http://127.0.0.1:1", url };
+        if (ok) LoopbackGuard.EnsureLoopback(urls);
+        else Assert.Throws<InvalidOperationException>(() => LoopbackGuard.EnsureLoopback(urls));
+    }
+
+    [Fact]
     public async Task RightToken_LowercaseScheme_Accepted()
     {
         using var res = await PostInitialize("bearer " + Token);

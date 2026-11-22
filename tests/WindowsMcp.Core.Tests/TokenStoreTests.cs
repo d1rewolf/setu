@@ -64,6 +64,22 @@ public sealed class TokenStoreTests : IDisposable
     }
 
     [Fact]
+    public void TokenStore_ExistingWorldReadableFile_IsReprotected()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("Unix file modes only");
+            return;
+        }
+        Directory.CreateDirectory(_dir);
+        var path = Path.Combine(_dir, "token");
+        File.WriteAllText(path, "abc123");
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        Assert.Equal("abc123", new TokenStore(_dir, new UnixTokenFileProtector()).GetOrCreate());
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+    }
+
+    [Fact]
     public void ServerOptions_DefaultPort47631()
     {
         var o = ServerOptions.Load(_dir);

@@ -26,7 +26,17 @@ public static class ServerHost
 {
     public static WebApplication Build(ServerHostSettings settings)
     {
-        var builder = WebApplication.CreateSlimBuilder();
+        if (!IPAddress.IsLoopback(settings.Address))
+            throw new ArgumentException($"The server only listens on loopback, not {settings.Address}.", nameof(settings));
+
+        // No args, no appsettings.json from the working directory, and no environment variables: nothing
+        // outside this method may add a Kestrel endpoint (Kestrel:Endpoints) or otherwise reconfigure the host.
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
+        {
+            Args = [],
+            ContentRootPath = AppContext.BaseDirectory,
+        });
+        builder.Configuration.Sources.Clear();
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         builder.WebHost.ConfigureKestrel(k => k.Listen(settings.Address, settings.Port));
 
@@ -35,6 +45,7 @@ public static class ServerHost
         builder.Services.AddSingleton(settings.Desktop);
         builder.Services.AddSingleton(settings.Launcher);
         builder.Services.AddSingleton<IProcessRunner>(new ProcessRunner(settings.Containment));
+        builder.Services.AddHostedService<LoopbackGuardService>();
 
         builder.Services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)

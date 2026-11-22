@@ -21,9 +21,18 @@ public static class BearerAuth
                 await next(context);
                 return;
             }
-            log.Write($"401 {context.Request.Method} {context.Request.Path}");
+            log.Write($"401 {Sanitize(context.Request.Method)} {Sanitize(context.Request.Path.ToUriComponent())}");
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         });
+    }
+
+    private const int MaxLoggedLength = 200;
+
+    /// <summary>Keeps client-controlled text to one short log line.</summary>
+    private static string Sanitize(string value)
+    {
+        var clean = new string(value.Where(c => !char.IsControl(c)).ToArray());
+        return clean.Length <= MaxLoggedLength ? clean : clean[..MaxLoggedLength] + "...";
     }
 
     private static bool IsAuthorized(string header, byte[] expected)
