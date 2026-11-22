@@ -12,25 +12,47 @@ public sealed record TextFormat(FileEncodingKind Kind, Encoding Encoding, int Pr
 
     static TextFormat() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
+    /// <summary>
+    /// Detects encoding and line endings. Callers must pass the whole file: line endings are
+    /// computed from the full content after the preamble.
+    /// </summary>
     public static TextFormat Detect(ReadOnlySpan<byte> bytes, int ansiCodePage)
     {
-        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-            return new(FileEncodingKind.Utf8Bom, new UTF8Encoding(true), 3, LineEndings.None);
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-            return new(FileEncodingKind.Utf16Le, new UnicodeEncoding(false, true), 2, LineEndings.None);
-        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-            return new(FileEncodingKind.Utf16Be, new UnicodeEncoding(true, true), 2, LineEndings.None);
+        FileEncodingKind kind;
+        Encoding encoding;
+        Encoding lenient;
+        int preamble;
 
-        try
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
         {
-            _ = new UTF8Encoding(false, true).GetCharCount(bytes);
-            return new(FileEncodingKind.Utf8, new UTF8Encoding(false), 0, LineEndings.None);
+            (kind, encoding, lenient, preamble) = (FileEncodingKind.Utf8Bom, new UTF8Encoding(true), new UTF8Encoding(false), 3);
         }
-        catch (DecoderFallbackException)
+        else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
         {
-            var ansi = Encoding.GetEncoding(ansiCodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
-            return new(FileEncodingKind.Ansi, ansi, 0, LineEndings.None);
+            (kind, encoding, lenient, preamble) = (FileEncodingKind.Utf16Le, new UnicodeEncoding(false, true), new UnicodeEncoding(false, false), 2);
         }
+        else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+        {
+            (kind, encoding, lenient, preamble) = (FileEncodingKind.Utf16Be, new UnicodeEncoding(true, true), new UnicodeEncoding(true, false), 2);
+        }
+        else
+        {
+            preamble = 0;
+            try
+            {
+                _ = new UTF8Encoding(false, true).GetCharCount(bytes);
+                (kind, encoding, lenient) = (FileEncodingKind.Utf8, new UTF8Encoding(false), new UTF8Encoding(false));
+            }
+            catch (DecoderFallbackException)
+            {
+                kind = FileEncodingKind.Ansi;
+                encoding = Encoding.GetEncoding(ansiCodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+                lenient = Encoding.GetEncoding(ansiCodePage);
+            }
+        }
+
+        var text = lenient.GetString(bytes[preamble..]);
+        return new(kind, encoding, preamble, DetectLineEndings(text));
     }
 
     public static bool LooksBinary(ReadOnlySpan<byte> bytes)

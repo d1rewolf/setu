@@ -59,4 +59,24 @@ public class TextFormatTests
     [InlineData("ab", LineEndings.None)]
     public void DetectLineEndings(string text, LineEndings expected) =>
         Assert.Equal(expected, TextFormat.DetectLineEndings(text));
+
+    [Fact]
+    public void Detect_Utf8Crlf_ReportsCrlf() =>
+        Assert.Equal(LineEndings.Crlf, TextFormat.Detect("a\r\nb\r\n"u8, 1252).LineEndings);
+
+    [Fact]
+    public void Detect_Utf16LeBomLf_ReportsLf()
+    {
+        var bytes = new byte[] { 0xFF, 0xFE }.Concat(Encoding.Unicode.GetBytes("a\nb")).ToArray();
+        Assert.Equal(LineEndings.Lf, TextFormat.Detect(bytes, 1252).LineEndings);
+    }
+
+    [Fact]
+    public void Detect_Ansi1252Crlf_ReportsCrlf()
+    {
+        byte[] bytes = [0x68, 0xE9, 0x0D, 0x0A, 0x6C, 0x0D, 0x0A];
+        var f = TextFormat.Detect(bytes, 1252);
+        Assert.Equal(FileEncodingKind.Ansi, f.Kind);
+        Assert.Equal(LineEndings.Crlf, f.LineEndings);
+    }
 }
