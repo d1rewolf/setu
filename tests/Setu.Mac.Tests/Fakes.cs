@@ -13,6 +13,15 @@ internal sealed class FakeMacSystem : IMacSystem
     public List<MacWindow> OnScreenWindows { get; set; } = [];
     public (double X, double Y, double W, double H) Union { get; set; } = (0, 0, 1512, 982);
     public int OwnPid { get; set; } = 100;
+    public bool SecureInput { get; set; }
+    public (int Pid, string Name)? SecureHolder { get; set; }
+    public int HolderQueries { get; private set; }
+    /// <summary>Every event passed to Post, in order.</summary>
+    public List<MacEvent> Posted { get; } = [];
+    /// <summary>Windows passed to Raise, in order.</summary>
+    public List<MacWindow> Raised { get; } = [];
+    /// <summary>When true, Raise moves the window to the front of <see cref="OnScreenWindows"/>.</summary>
+    public bool RaiseWorks { get; set; } = true;
 
     public bool OnConsole() => Console;
     public bool ScreenLocked() => Locked;
@@ -20,6 +29,23 @@ internal sealed class FakeMacSystem : IMacSystem
     public bool PostEventAllowed() => PostEvents;
     public IReadOnlyList<MacWindow> Windows(bool onScreenOnly) => onScreenOnly ? OnScreenWindows : AllWindows;
     public (double X, double Y, double W, double H) ScreenUnion() => Union;
+    public bool SecureInputOn() => SecureInput;
+
+    public (int Pid, string Name)? SecureInputHolder()
+    {
+        HolderQueries++;
+        return SecureHolder;
+    }
+
+    public void Post(IReadOnlyList<MacEvent> events) => Posted.AddRange(events);
+
+    public void Raise(MacWindow window)
+    {
+        Raised.Add(window);
+        if (!RaiseWorks) return;
+        var front = window with { OnScreen = true };
+        OnScreenWindows = [front, .. OnScreenWindows.Where(w => w.Id != window.Id)];
+    }
 }
 
 /// <summary>Records each command; for screencapture, writes <see cref="Png"/> to the last argument (the out file).</summary>

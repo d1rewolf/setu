@@ -17,10 +17,13 @@ public sealed record KeyVocabulary(
 
     private static readonly string[] NotOnMac = ["insert", "printscreen"];
 
+    /// <summary>macOS key codes stop at F20 (kVK_F20).</summary>
+    private const int MacMaxFunctionKey = 20;
+
     public static KeyVocabulary Windows { get; } = new(
         "Windows",
         new Dictionary<string, string> { ["ctrl"] = "ctrl", ["alt"] = "alt", ["shift"] = "shift", ["win"] = "win" },
-        BuildKeys(NamedKeys),
+        BuildKeys(NamedKeys, maxFunctionKey: 24),
         new Dictionary<string, string>());
 
     public static KeyVocabulary Mac { get; } = new(
@@ -30,25 +33,37 @@ public sealed record KeyVocabulary(
             ["cmd"] = "cmd", ["command"] = "cmd", ["ctrl"] = "ctrl",
             ["option"] = "option", ["alt"] = "option", ["shift"] = "shift",
         },
-        BuildKeys(NamedKeys.Except(NotOnMac)),
+        BuildKeys(NamedKeys.Except(NotOnMac), MacMaxFunctionKey),
         new Dictionary<string, string>
         {
             ["win"] = "use cmd on macOS",
             ["insert"] = "not on a Mac keyboard",
             ["printscreen"] = "not on a Mac keyboard",
+            ["f21"] = "not on a Mac keyboard",
+            ["f22"] = "not on a Mac keyboard",
+            ["f23"] = "not on a Mac keyboard",
+            ["f24"] = "not on a Mac keyboard",
         });
 
-    private static HashSet<string> BuildKeys(IEnumerable<string> named)
+    private static HashSet<string> BuildKeys(IEnumerable<string> named, int maxFunctionKey)
     {
         var set = new HashSet<string>(named);
         for (var c = 'a'; c <= 'z'; c++) set.Add(c.ToString());
         for (var c = '0'; c <= '9'; c++) set.Add(c.ToString());
-        for (var i = 1; i <= 24; i++) set.Add($"f{i}");
+        for (var i = 1; i <= maxFunctionKey; i++) set.Add($"f{i}");
         return set;
     }
 
+    /// <summary>The highest fN key in <see cref="Keys"/>; both vocabularies have f1 up to it with no gaps.</summary>
+    private int MaxFunctionKey()
+    {
+        var n = 0;
+        while (Keys.Contains($"f{n + 1}")) n++;
+        return n;
+    }
+
     internal string KnownList() =>
-        $"modifiers: {string.Join(" ", Modifiers.Values.Distinct())}; keys: a-z 0-9 f1-f24 {string.Join(" ", NamedKeys.Where(Keys.Contains))}";
+        $"modifiers: {string.Join(" ", Modifiers.Values.Distinct())}; keys: a-z 0-9 f1-f{MaxFunctionKey()} {string.Join(" ", NamedKeys.Where(Keys.Contains))}";
 }
 
 public static class KeySpec

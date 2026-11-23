@@ -106,4 +106,48 @@ public class MacDesktopCheckTests
         var desktop = Desktop(new FakeMacSystem());
         foreach (var use in AllUses) Assert.Null(desktop.Check(use));
     }
+
+    [Fact]
+    public void SecureInput_PerSpikeResult()
+    {
+        // The spike showed posted keystrokes still arrive under secure input, so it is a note, not a block.
+        var desktop = Desktop(new FakeMacSystem { SecureInput = true, SecureHolder = (123, "loginwindow") });
+        Assert.Equal(
+            new ScreenCheck("secure keyboard entry is on, held by 'loginwindow' (PID 123)", Blocks: false),
+            desktop.Check(ScreenUse.Keyboard));
+    }
+
+    [Fact]
+    public void SecureInput_HolderUnknown_NoteWithoutHolder()
+    {
+        var desktop = Desktop(new FakeMacSystem { SecureInput = true, SecureHolder = null });
+        Assert.Equal(new ScreenCheck("secure keyboard entry is on", Blocks: false), desktop.Check(ScreenUse.Keyboard));
+    }
+
+    [Fact]
+    public void SecureInput_DoesNotAffectPointer()
+    {
+        var desktop = Desktop(new FakeMacSystem { SecureInput = true, SecureHolder = (123, "loginwindow") });
+        Assert.Null(desktop.Check(ScreenUse.Pointer));
+        Assert.Null(desktop.Check(ScreenUse.See));
+        Assert.Null(desktop.Check(ScreenUse.List));
+    }
+
+    [Fact]
+    public void SecureInput_ComesAfterTheBlockingChecks()
+    {
+        var sys = new FakeMacSystem { SecureInput = true, SecureHolder = (123, "loginwindow"), PostEvents = false };
+        Assert.Equal(new ScreenCheck(AccessibilityMessage, Blocks: true), Desktop(sys).Check(ScreenUse.Keyboard));
+        sys.PostEvents = true;
+        sys.Locked = true;
+        Assert.Equal(new ScreenCheck(LockedMessage, Blocks: true), Desktop(sys).Check(ScreenUse.Keyboard));
+    }
+
+    [Fact]
+    public void SecureInputOff_HolderNotAsked()
+    {
+        var sys = new FakeMacSystem { SecureInput = false };
+        Assert.Null(Desktop(sys).Check(ScreenUse.Keyboard));
+        Assert.Equal(0, sys.HolderQueries);
+    }
 }

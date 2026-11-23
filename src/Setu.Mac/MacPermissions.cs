@@ -18,6 +18,10 @@ internal static class MacPermissions
         "Setu needs Accessibility permission. At the Mac: System Settings › Privacy & Security › " +
         "Accessibility › turn on Setu. File and shell tools still work." + RestartHint;
 
+    /// <summary>The note on type_text and send_keys while some process holds secure keyboard entry.</summary>
+    internal static string SecureInputNote((int Pid, string Name)? holder) =>
+        holder is { } h ? $"secure keyboard entry is on, held by '{h.Name}' (PID {h.Pid})" : "secure keyboard entry is on";
+
     /// <summary>
     /// Granted when the preflight says so, or when macOS shows the name of at least one other process's
     /// on-screen, layer-0 window (it hides those names without the grant). The preflight can keep a stale

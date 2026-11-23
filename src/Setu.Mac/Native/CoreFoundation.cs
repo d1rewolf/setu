@@ -59,8 +59,18 @@ internal static unsafe partial class CoreFoundation
     internal static partial void CFStringGetCharacters(nint str, CFRange range, char* buffer);
 
     [LibraryImport(Lib)]
+    internal static partial nuint CFArrayGetTypeID();
+
+    [LibraryImport(Lib)]
     internal static partial nint CFArrayGetCount(nint array);
 
     [LibraryImport(Lib)]
     internal static partial nint CFArrayGetValueAtIndex(nint array, nint index);
+
+    /// <summary>
+    /// The value of an exported CF constant such as kCFBooleanTrue. The export is the address of the variable
+    /// that holds the reference, so it is read once more. Never released.
+    /// </summary>
+    internal static nint Constant(string name) =>
+        *(nint*)NativeLibrary.GetExport(NativeLibrary.Load(Lib), name);
 }
