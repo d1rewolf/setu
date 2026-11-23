@@ -13,7 +13,17 @@ namespace Setu.Win32;
 /// </summary>
 public sealed partial class Win32Desktop : IDesktop
 {
-    public unsafe DesktopState State()
+    public ScreenCheck? Check(ScreenUse use)
+    {
+        if (use == ScreenUse.List) return null;
+        var state = State();
+        if (state != DesktopState.Available) return new(WindowsScreenMessages.LockedMessage(state), Blocks: true);
+        if (use is ScreenUse.Pointer or ScreenUse.Keyboard && ElevatedForegroundWindow() is { } w)
+            return new(WindowsScreenMessages.ElevatedMessage(w), Blocks: true);
+        return null;
+    }
+
+    private unsafe DesktopState State()
     {
         if (!NativeMethods.WTSQuerySessionInformation(
                 0, NativeMethods.WTS_CURRENT_SESSION, NativeMethods.WTSConnectState, out var buffer, out var bytes))
@@ -46,7 +56,12 @@ public sealed partial class Win32Desktop : IDesktop
         }
     }
 
-    public WindowInfo? ElevatedForegroundWindow()
+    /// <summary>
+    /// The foreground window when its process runs at a higher integrity level than this one (for example
+    /// an Administrator terminal), else null. Windows then drops this process's synthetic input and
+    /// refuses to change the foreground, while still reporting success.
+    /// </summary>
+    private WindowInfo? ElevatedForegroundWindow()
     {
         var hwnd = NativeMethods.GetForegroundWindow();
         if (hwnd == 0 || NativeMethods.GetWindowThreadProcessId(hwnd, out var pid) == 0) return null;

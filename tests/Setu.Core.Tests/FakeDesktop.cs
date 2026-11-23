@@ -5,18 +5,15 @@ namespace Setu.Core.Tests;
 /// <summary>In-memory IDesktop that records every call. Reused by the HTTP host tests.</summary>
 public sealed class FakeDesktop : IDesktop
 {
-    public DesktopState CurrentState { get; set; } = DesktopState.Available;
+    public Dictionary<ScreenUse, ScreenCheck> Checks { get; } = [];
     public List<WindowInfo> Windows { get; set; } = [];
     public Capture NextCapture { get; set; } = new([1, 2, 3], 0, 0, 100, 50, 1.0);
     public bool FocusResult { get; set; } = true;
-    public WindowInfo? ElevatedForeground { get; set; }
     public List<string> Calls { get; } = [];
     public (CaptureTarget Target, int? MaxWidth)? LastCapture { get; private set; }
     public IReadOnlyList<KeyChord>? LastChords { get; private set; }
 
-    public DesktopState State() => CurrentState;
-
-    public WindowInfo? ElevatedForegroundWindow() => ElevatedForeground;
+    public ScreenCheck? Check(ScreenUse use) => Checks.GetValueOrDefault(use);
 
     public IReadOnlyList<WindowInfo> ListWindows()
     {

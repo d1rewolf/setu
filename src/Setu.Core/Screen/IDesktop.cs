@@ -2,6 +2,14 @@ namespace Setu.Core.Screen;
 
 public enum DesktopState { Available, Locked, Disconnected }
 
+public enum ScreenUse { See, List, Pointer, Keyboard }
+
+/// <summary>
+/// Blocks=true: the tool throws McpException(Message) before touching the desktop.
+/// Blocks=false: the tool runs and appends "\nnote: " + Message to its text result.
+/// </summary>
+public sealed record ScreenCheck(string Message, bool Blocks);
+
 public enum MouseButton { Left, Right, Middle }
 
 public sealed record WindowInfo(
@@ -24,14 +32,11 @@ public sealed record KeyChord(IReadOnlyList<string> Modifiers, string Key);
 /// <summary>The OS-facing surface the screen tools run against. Implemented with Win32 elsewhere.</summary>
 public interface IDesktop
 {
-    DesktopState State();
-
     /// <summary>
-    /// The foreground window when its process runs at a higher integrity level than this one (for example
-    /// an Administrator terminal), else null. Windows then drops this process's synthetic input and
-    /// refuses to change the foreground, while still reporting success.
+    /// Whether this desktop can serve the given use right now, or null when nothing stands in the way.
+    /// A blocking check stops the tool before it touches the desktop; a non-blocking one is a note on the result.
     /// </summary>
-    WindowInfo? ElevatedForegroundWindow();
+    ScreenCheck? Check(ScreenUse use);
     IReadOnlyList<WindowInfo> ListWindows();
     Capture Capture(CaptureTarget target, int? maxWidth);
     void Click(int x, int y, MouseButton button, bool doubleClick);

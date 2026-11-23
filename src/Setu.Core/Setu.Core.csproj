@@ -3,4 +3,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Setu.Win32" />
+    <InternalsVisibleTo Include="Setu.Core.Tests" />
+  </ItemGroup>
 </Project>

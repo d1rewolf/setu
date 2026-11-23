@@ -13,12 +13,13 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     [McpServerTool(Name = "list_windows")]
-    [Description("Lists visible top-level windows, one per line, tab-separated: handle, pid, process name, x,y,w,h, flags (fg = foreground, min = minimized), title. Use the handle with screenshot (window:<handle>) and focus_window. Works even while the screen is locked.")]
+    [Description("Lists visible top-level windows, one per line, tab-separated: handle, pid, process name, x,y,w,h, flags (fg = foreground, min = minimized), title. Use the handle with screenshot (window:<handle>) and focus_window. Usually works while the screen is locked.")]
     public string ListWindows()
         => ToolGuard.Run(log, "list_windows", () =>
         {
+            var note = Note(Gate(ScreenUse.List));
             var windows = desktop.ListWindows();
-            if (windows.Count == 0) return "No windows.";
+            if (windows.Count == 0) return "No windows." + note;
             var sb = new StringBuilder();
             foreach (var w in windows)
             {
@@ -30,7 +31,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
                   .Append(flags).Append('\t')
                   .Append(OneField(w.Title)).Append('\n');
             }
-            return sb.ToString();
+            return sb.ToString() + note;
         });
 
     [McpServerTool(Name = "screenshot")]
@@ -40,12 +41,12 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("Optional. Downscale the image so it is at most this many pixels wide (>= 1). Scale in the text block reflects it.")] int? max_width = null)
         => ToolGuard.Run(log, "screenshot", () =>
         {
-            RequireAvailable();
+            var note = Note(Gate(ScreenUse.See));
             if (max_width is < 1) throw new ToolInputException("max_width must be at least 1");
             var parsed = ParseTarget(target);
             var cap = desktop.Capture(parsed, max_width);
             var header = string.Create(Inv,
-                $"origin=({cap.OriginX},{cap.OriginY}) scale={cap.Scale:0.######} size={cap.PixelWidth}x{cap.PixelHeight}; screen_x = origin_x + image_x / scale");
+                $"origin=({cap.OriginX},{cap.OriginY}) scale={cap.Scale:0.######} size={cap.PixelWidth}x{cap.PixelHeight}; screen_x = origin_x + image_x / scale") + note;
             return (IEnumerable<ContentBlock>)new ContentBlock[]
             {
                 new TextContentBlock { Text = header },
@@ -62,11 +63,11 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("True for a double click.")] bool double_click = false)
         => ToolGuard.Run(log, "click", () =>
         {
-            RequireInputAllowed();
+            var note = Note(Gate(ScreenUse.Pointer));
             if (!Enum.TryParse<MouseButton>(button?.Trim(), ignoreCase: true, out var b) || !Enum.IsDefined(b))
                 throw new ToolInputException($"Unknown button '{button}'; use left, right or middle");
             desktop.Click(x, y, b, double_click);
-            return "Clicked";
+            return "Clicked" + note;
         });
 
     [McpServerTool(Name = "type_text")]
@@ -75,9 +76,9 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("The text to type.")] string text)
         => ToolGuard.Run(log, "type_text", () =>
         {
-            RequireInputAllowed();
+            var note = Note(Gate(ScreenUse.Keyboard));
             desktop.TypeText(text ?? "");
-            return "Typed";
+            return "Typed" + note;
         });
 
     [McpServerTool(Name = "send_keys")]
@@ -86,9 +87,9 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("Space-separated chords, e.g. \"ctrl+shift+s enter\".")] string keys)
         => ToolGuard.Run(log, "send_keys", () =>
         {
-            RequireInputAllowed();
+            var note = Note(Gate(ScreenUse.Keyboard));
             desktop.SendKeys(KeySpec.Parse(keys));
-            return "Sent";
+            return "Sent" + note;
         });
 
     [McpServerTool(Name = "scroll")]
@@ -99,50 +100,39 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         [Description("Wheel notches; positive up, negative down.")] int amount)
         => ToolGuard.Run(log, "scroll", () =>
         {
-            RequireInputAllowed();
+            var note = Note(Gate(ScreenUse.Pointer));
             desktop.Scroll(x, y, amount);
-            return "Scrolled";
+            return "Scrolled" + note;
         });
 
     [McpServerTool(Name = "focus_window")]
-    [Description("Brings a window to the foreground, restoring it if minimized. The handle comes from list_windows. Windows can refuse; the error says so.")]
+    [Description("Brings a window to the foreground, restoring it if minimized. The handle comes from list_windows. The OS can refuse; the error says so.")]
     public string FocusWindow(
         [Description("Window handle from list_windows.")] long handle)
         => ToolGuard.Run(log, "focus_window", () =>
         {
-            RequireInputAllowed();
+            var note = Note(Gate(ScreenUse.Pointer));
             if (!desktop.FocusWindow(handle))
                 throw new McpException($"Windows refused to bring {handle} to the foreground");
-            return "Focused";
+            return "Focused" + note;
         });
 
     /// <summary>A tab or line break in a title would break the one-line, tab-separated format.</summary>
-    private static string OneField(string value) =>
+    internal static string OneField(string value) =>
         string.Create(value.Length, value, static (span, v) =>
         {
             for (var i = 0; i < v.Length; i++) span[i] = char.IsControl(v[i]) ? ' ' : v[i];
         });
 
-    private void RequireAvailable()
+    /// <summary>Throws when the desktop blocks this use; otherwise returns the non-blocking note, if any.</summary>
+    private ScreenCheck? Gate(ScreenUse use)
     {
-        var state = desktop.State();
-        if (state != DesktopState.Available)
-            throw new McpException($"The screen is locked or the session is disconnected ({state}); file and shell tools still work.");
+        var check = desktop.Check(use);
+        if (check is { Blocks: true }) throw new McpException(check.Message);
+        return check;
     }
 
-    /// <summary>
-    /// Input tools need the desktop, and no elevated window in front: Windows silently drops input from a
-    /// normal process then, so a "Clicked" would be a lie.
-    /// </summary>
-    private void RequireInputAllowed()
-    {
-        RequireAvailable();
-        if (desktop.ElevatedForegroundWindow() is { } w)
-            throw new McpException(
-                $"The window in front, '{OneField(w.Title)}' ({OneField(w.ProcessName)}), is running as administrator, " +
-                "so Windows blocks mouse and keyboard input from setu. Ask the user to switch to another window " +
-                "or minimise it; screenshot, list_windows, file and shell tools still work.");
-    }
+    private static string Note(ScreenCheck? check) => check is null ? "" : "\nnote: " + check.Message;
 
     private static CaptureTarget ParseTarget(string? target)
     {

@@ -12,64 +12,68 @@ public sealed class ScreenToolsTests
         return (new ScreenTools(RequestLog.Null, d), d);
     }
 
-    [Theory]
-    [InlineData(DesktopState.Locked)]
-    [InlineData(DesktopState.Disconnected)]
-    public void ScreenTools_DesktopUnavailable_ThrowsPlainError(DesktopState state)
+    public static TheoryData<ScreenUse, string> ToolsByUse() => new()
     {
-        var (t, d) = Make();
-        d.CurrentState = state;
-        var ex = Assert.Throws<McpException>(() => t.Click(1, 2));
-        Assert.Contains("locked or the session is disconnected", ex.Message);
-        Assert.Contains(state.ToString(), ex.Message);
-        Assert.Contains("file and shell tools still work", ex.Message);
-        Assert.DoesNotContain(d.Calls, c => c.StartsWith("Click"));
-    }
+        { ScreenUse.See, "screenshot" },
+        { ScreenUse.List, "list_windows" },
+        { ScreenUse.Pointer, "click" },
+        { ScreenUse.Pointer, "scroll" },
+        { ScreenUse.Pointer, "focus_window" },
+        { ScreenUse.Keyboard, "type_text" },
+        { ScreenUse.Keyboard, "send_keys" },
+    };
 
-    [Fact]
-    public void ScreenTools_DesktopUnavailable_GuardsEveryToolExceptListWindows()
+    private static void RunTool(ScreenTools t, string tool)
     {
-        var (t, d) = Make();
-        d.CurrentState = DesktopState.Locked;
-        Assert.Throws<McpException>(() => t.Screenshot());
-        Assert.Throws<McpException>(() => t.TypeText("x"));
-        Assert.Throws<McpException>(() => t.SendKeys("enter"));
-        Assert.Throws<McpException>(() => t.Scroll(0, 0, 1));
-        Assert.Throws<McpException>(() => t.FocusWindow(1));
-        t.ListWindows();
-    }
-
-    private static readonly WindowInfo AdminTerminal =
-        new(42, "Administrator: Windows PowerShell", "WindowsTerminal", 8212, 0, 0, 100, 100, false, true);
-
-    [Fact]
-    public void InputTools_ElevatedForeground_ThrowPlainError_WithoutSendingInput()
-    {
-        var (t, d) = Make();
-        d.ElevatedForeground = AdminTerminal;
-        var calls = new Action[]
+        switch (tool)
         {
-            () => t.Click(1, 2), () => t.TypeText("x"), () => t.SendKeys("enter"),
-            () => t.Scroll(0, 0, 1), () => t.FocusWindow(7),
-        };
-        foreach (var call in calls)
-        {
-            var ex = Assert.Throws<McpException>(call);
-            Assert.Contains("'Administrator: Windows PowerShell' (WindowsTerminal)", ex.Message);
-            Assert.Contains("running as administrator", ex.Message);
-            Assert.Contains("screenshot, list_windows, file and shell tools still work", ex.Message);
+            case "screenshot": t.Screenshot().ToList(); break;
+            case "list_windows": t.ListWindows(); break;
+            case "click": t.Click(1, 2); break;
+            case "scroll": t.Scroll(0, 0, 1); break;
+            case "focus_window": t.FocusWindow(7); break;
+            case "type_text": t.TypeText("x"); break;
+            case "send_keys": t.SendKeys("enter"); break;
+            default: throw new ArgumentException(tool);
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(ToolsByUse))]
+    public void Check_Blocks_ThrowsMessageVerbatim_WithoutCallingDesktop(ScreenUse use, string tool)
+    {
+        var (t, d) = Make();
+        d.Checks[use] = new("nope", true);
+        var ex = Assert.Throws<McpException>(() => RunTool(t, tool));
+        Assert.Equal("nope", ex.Message);
         Assert.Empty(d.Calls);
     }
 
     [Fact]
-    public void ReadOnlyScreenTools_ElevatedForeground_StillWork()
+    public void Check_Note_AppendsToResult()
     {
         var (t, d) = Make();
-        d.ElevatedForeground = AdminTerminal;
-        t.Screenshot();
-        t.ListWindows();
-        Assert.Equal(["Capture", "ListWindows"], d.Calls);
+        d.Checks[ScreenUse.Keyboard] = new("secure input on", false);
+        Assert.Equal("Typed\nnote: secure input on", t.TypeText("x"));
+        Assert.Contains("TypeText x", d.Calls);
+    }
+
+    [Fact]
+    public void Check_Note_GoesInScreenshotHeaderBlock()
+    {
+        var (t, d) = Make();
+        d.Checks[ScreenUse.See] = new("dim display", false);
+        var text = Assert.IsType<TextContentBlock>(t.Screenshot().First());
+        Assert.EndsWith("\nnote: dim display", text.Text);
+    }
+
+    [Fact]
+    public void Check_OtherUseBlocked_DoesNotAffectThisTool()
+    {
+        var (t, d) = Make();
+        d.Checks[ScreenUse.Keyboard] = new("nope", true);
+        Assert.Equal("Clicked", t.Click(1, 2));
+        Assert.Single(d.Calls);
     }
 
     [Fact]
