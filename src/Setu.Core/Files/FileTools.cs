@@ -171,7 +171,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
         [Description("Sort key: name, time or size. Directories come first only when sorting by name.")] string sort = "name",
         [Description("Reverse the sort order (newest or largest first).")] bool descending = false,
         [Description("Maximum number of entries to return.")] int limit = 500)
-        => Run("list_dir", path, () =>
+        => Run("list_dir", path, ct =>
         {
             var key = sort.ToLowerInvariant();
             if (key is not ("name" or "time" or "size"))
@@ -182,7 +182,11 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
 
             var entries = new DirectoryInfo(full)
                 .EnumerateFileSystemInfos("*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = 0 })
-                .Where(e => string.IsNullOrEmpty(pattern) || FileSystemName.MatchesSimpleExpression(pattern, e.Name, true))
+                .Where(e =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    return string.IsNullOrEmpty(pattern) || FileSystemName.MatchesSimpleExpression(pattern, e.Name, true);
+                })
                 .Select(e => IsProtectedLink(e)
                     // Shown by name only: its size and time would stat the protected target.
                     ? (Info: e, IsDir: false, Size: 0L, Time: DateTime.UnixEpoch.ToLocalTime())
@@ -220,7 +224,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
         [Description("Optional wildcard on the file name, such as *.log.")] string? name_pattern = null,
         [Description("Optional .NET regular expression matched against each line of text files.")] string? content_regex = null,
         [Description("Maximum number of matches to return (clamped to 2000).")] int limit = 200)
-        => Run("search", path, () =>
+        => Run("search", path, ct =>
         {
             if (string.IsNullOrEmpty(name_pattern) && string.IsNullOrEmpty(content_regex))
                 throw new ToolInputException("Provide name_pattern, content_regex or both");
@@ -280,6 +284,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 },
                 ShouldRecursePredicate = (ref entry) =>
                 {
+                    ct.ThrowIfCancellationRequested();
                     var dir = entry.ToFullPath();
                     if (options.Protected.Match(dir) is null) return true;
                     if (!skippedProtected.Contains(dir)) skippedProtected.Add(dir);
@@ -288,6 +293,8 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             };
             foreach (var file in files)
             {
+                ct.ThrowIfCancellationRequested();
+                OnSearchFile?.Invoke(file);
                 if (!string.IsNullOrEmpty(name_pattern)
                     && !FileSystemName.MatchesSimpleExpression(name_pattern, Path.GetFileName(file), true))
                     continue;
@@ -318,6 +325,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 {
                     foreach (var line in text.Split('\n'))
                     {
+                        ct.ThrowIfCancellationRequested();
                         lineNo++;
                         var clean = line.TrimEnd('\r');
                         if (!regex.IsMatch(clean)) continue;
@@ -343,16 +351,25 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             return sb.ToString();
         });
 
+    /// <summary>Test hook: called with the abandoned work when a call runs past the time limit.</summary>
+    internal Action<Task>? OnAbandoned { get; init; }
+
+    /// <summary>Test hook: called with each file <see cref="Search"/> is about to look at.</summary>
+    internal Action<string>? OnSearchFile { get; init; }
+
+    internal T Run<T>(string tool, string path, Func<T> body) => Run(tool, path, _ => body());
+
     /// <summary>
     /// ToolGuard.Run, plus on non-Windows a refused open (EPERM or EACCES, which .NET raises as
     /// UnauthorizedAccessException) becomes a plain "permission denied" for the path the agent gave.
+    /// The token is cancelled when the call runs past its time limit; long loops check it.
     /// </summary>
-    internal T Run<T>(string tool, string path, Func<T> body)
-        => ToolGuard.Run(log, tool, () => WithinTimeLimit(tool, () =>
+    internal T Run<T>(string tool, string path, Func<CancellationToken, T> body)
+        => ToolGuard.Run(log, tool, () => WithinTimeLimit(tool, ct =>
         {
             try
             {
-                return body();
+                return body(ct);
             }
             catch (UnauthorizedAccessException) when (!OperatingSystem.IsWindows())
             {
@@ -363,21 +380,27 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
         }));
 
     /// <summary>
-    /// Runs <paramref name="body"/> directly when there is no time limit. Otherwise runs it on the thread pool and
-    /// waits up to the limit, then gives the agent an error. The abandoned work keeps running in the background:
-    /// a thread blocked in the kernel on a privacy prompt cannot be cancelled, and the file tools take no
-    /// cancellation token. That is accepted; the request thread is what must not hang.
+    /// Runs <paramref name="body"/> directly, with a token that is never cancelled, when there is no time limit.
+    /// Otherwise runs it on the thread pool and waits up to the limit, then cancels its token and gives the agent an
+    /// error. The long loops (search's files and lines, list_dir's entries) check the token and stop; a thread
+    /// blocked in the kernel on a privacy prompt cannot be cancelled and stays abandoned until the kernel returns.
+    /// That is accepted; the request thread is what must not hang.
     /// </summary>
-    private T WithinTimeLimit<T>(string tool, Func<T> body)
+    private T WithinTimeLimit<T>(string tool, Func<CancellationToken, T> body)
     {
-        if (options.CallTimeLimit is not { } limit) return body();
-        var work = Task.Run(body);
+        if (options.CallTimeLimit is not { } limit) return body(CancellationToken.None);
+        var cts = new CancellationTokenSource();
+        var work = Task.Run(() => body(cts.Token));
         if (Task.WaitAny([work], limit) < 0)
         {
-            // Observe a late failure so it is not reported as an unobserved task exception.
-            work.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            cts.Cancel();
+            // Observe a late failure (the cancellation itself included) so it is not reported as an unobserved
+            // task exception, and dispose the source once the work has stopped.
+            work.ContinueWith(t => { _ = t.Exception; cts.Dispose(); }, TaskScheduler.Default);
+            OnAbandoned?.Invoke(work);
             throw new ToolInputException(TimeLimitMessage(tool, limit));
         }
+        cts.Dispose();
         return work.GetAwaiter().GetResult(); // rethrows the body's own exception unwrapped
     }
 
