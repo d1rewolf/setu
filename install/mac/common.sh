@@ -26,8 +26,8 @@ parse_binary_args() {
   BINARY="" VERSION="0.1.0"
   while (( $# )); do
     case $1 in
-      --binary)  BINARY=${2:-}; shift 2 ;;
-      --version) VERSION=${2:-}; shift 2 ;;
+      --binary)  (( $# >= 2 )) || fail "--binary needs a path."; BINARY=$2; shift 2 ;;
+      --version) (( $# >= 2 )) || fail "--version needs a value."; VERSION=$2; shift 2 ;;
       *) fail "unknown option '$1'. Usage: $ZSH_ARGZERO --binary <path to setu> [--version X.Y.Z]" ;;
     esac
   done
@@ -57,42 +57,65 @@ port_from_config() {
 }
 
 # Creates the signing keychain and the self-signed certificate if they don't exist yet,
-# and records the certificate's SHA-1. The key never leaves this Mac.
+# and records the certificate's SHA-1. The key never leaves this Mac. Each piece is checked
+# on its own, so a run that failed halfway is finished by the next run.
 ensure_signing_identity() {
   mkdir -p "$DATA"; chmod 700 "$DATA"
-  if [[ ! -f $KEYCHAIN ]]; then
-    say "Creating Setu's signing certificate (once per Mac)..."
-    (umask 077; head -c 32 /dev/urandom | base64 | tr -d '/+=' > "$KEYCHAIN_PW_FILE")
-    local pw=$(<"$KEYCHAIN_PW_FILE")
-    security create-keychain -p "$pw" "$KEYCHAIN"
-    security set-keychain-settings "$KEYCHAIN"   # no auto-lock
-    security unlock-keychain -p "$pw" "$KEYCHAIN"
-    add_keychain_to_search_list
-    local tmp=$(mktemp -d)
-    {
-      local p12pw=$(head -c 16 /dev/urandom | base64 | tr -d '/+=')
-      /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 7300 \
-        -keyout "$tmp/key.pem" -out "$tmp/cert.pem" -subj "/CN=$CERT_CN" \
-        -addext "extendedKeyUsage=critical,codeSigning" \
-        -addext "keyUsage=critical,digitalSignature" \
-        -addext "basicConstraints=critical,CA:false" 2>/dev/null
-      /usr/bin/openssl pkcs12 -export -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
-        -out "$tmp/id.p12" -passout "pass:$p12pw"
-      security import "$tmp/id.p12" -k "$KEYCHAIN" -P "$p12pw" -T /usr/bin/codesign >/dev/null
-      security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pw" "$KEYCHAIN" >/dev/null
-    } always { rm -rf "$tmp" }
-  fi
+  [[ -f $KEYCHAIN ]] || create_signing_keychain
   [[ -f $KEYCHAIN_PW_FILE ]] || fail "the signing keychain exists but its password file $KEYCHAIN_PW_FILE is missing."
   chmod 600 "$KEYCHAIN_PW_FILE"
   add_keychain_to_search_list
   unlock_signing
-  local sha1=$(signing_sha1)
+  [[ -n $(signing_sha1) ]] || create_signing_certificate
+  local sha1
+  sha1=$(signing_sha1)
   [[ -n $sha1 ]] || fail "no '$CERT_CN' certificate in $KEYCHAIN."
   if [[ ! -f $LEAF_FILE ]]; then
     (umask 077; print -r -- "$sha1" > "$LEAF_FILE")
   elif [[ $(<"$LEAF_FILE") != "$sha1" ]]; then
-    fail "the signing certificate changed (expected $(<"$LEAF_FILE"), found $sha1). Signing with it would silently drop Setu's Screen Recording and Accessibility permissions, so nothing was changed."
+    fail "the signing certificate changed (expected $(<"$LEAF_FILE"), found $sha1). Signing with it would silently drop Setu's Screen Recording and Accessibility permissions, so the installed app was left as it is."
   fi
+}
+
+create_signing_keychain() {
+  say "Creating Setu's signing keychain (once per Mac)..."
+  local pw
+  (umask 077; head -c 32 /dev/urandom | base64 | tr -d '/+=' > "$KEYCHAIN_PW_FILE")
+  pw=$(<"$KEYCHAIN_PW_FILE")
+  [[ -n $pw ]] || fail "could not make a password for the signing keychain."
+  security create-keychain -p "$pw" "$KEYCHAIN" || fail "could not create $KEYCHAIN."
+  security set-keychain-settings "$KEYCHAIN"   # no auto-lock
+}
+
+# The private key exists on disk only inside the temporary folder, which is deleted
+# whether or not the steps succeed.
+create_signing_certificate() {
+  say "Creating Setu's signing certificate (once per Mac)..."
+  local tmp ok=false
+  tmp=$(mktemp -d) && [[ -d $tmp ]] || fail "could not make a temporary folder."
+  make_certificate_in "$tmp" && ok=true
+  rm -rf "$tmp"
+  $ok || fail "could not create Setu's signing certificate; see the error above."
+}
+
+# Runs under `&&`, where errexit is off, so every step checks itself.
+make_certificate_in() {
+  local tmp=$1 p12pw out
+  p12pw=$(head -c 16 /dev/urandom | base64 | tr -d '/+=')
+  [[ -n $p12pw ]] || { say "could not make a temporary password."; return 1; }
+  out=$(/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 7300 \
+          -keyout "$tmp/key.pem" -out "$tmp/cert.pem" -subj "/CN=$CERT_CN" \
+          -addext "extendedKeyUsage=critical,codeSigning" \
+          -addext "keyUsage=critical,digitalSignature" \
+          -addext "basicConstraints=critical,CA:false" 2>&1) \
+    || { say "openssl could not make the certificate: $out"; return 1; }
+  out=$(/usr/bin/openssl pkcs12 -export -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
+          -out "$tmp/id.p12" -passout "pass:$p12pw" 2>&1) \
+    || { say "openssl could not package the certificate: $out"; return 1; }
+  out=$(security import "$tmp/id.p12" -k "$KEYCHAIN" -P "$p12pw" -T /usr/bin/codesign 2>&1) \
+    || { say "could not import the certificate into $KEYCHAIN: $out"; return 1; }
+  out=$(security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$(<"$KEYCHAIN_PW_FILE")" "$KEYCHAIN" 2>&1) \
+    || { say "could not let codesign use the key without a prompt: $out"; return 1; }
 }
 
 unlock_signing() { security unlock-keychain -p "$(<"$KEYCHAIN_PW_FILE")" "$KEYCHAIN"; }
@@ -101,14 +124,15 @@ signing_sha1() { security find-certificate -c "$CERT_CN" -Z "$KEYCHAIN" 2>/dev/n
 
 keychain_search_list() { security list-keychains -d user | sed -e 's/^ *"//' -e 's/"$//'; }
 
+# The search list holds resolved paths (/var is shown as /private/var), so compare resolved paths.
 add_keychain_to_search_list() {
   local -a list=("${(@f)$(keychain_search_list)}")
-  (( ${list[(Ie)$KEYCHAIN]} )) || security list-keychains -d user -s "${list[@]}" "$KEYCHAIN"
+  (( ${list[(Ie)${KEYCHAIN:A}]} )) || security list-keychains -d user -s "${list[@]}" "$KEYCHAIN"
 }
 
 remove_keychain_from_search_list() {
   local -a list=("${(@f)$(keychain_search_list)}")
-  list=("${(@)list:#$KEYCHAIN}")
+  list=("${(@)list:#${KEYCHAIN:A}}")
   security list-keychains -d user -s "${list[@]}"
 }
 
@@ -216,10 +240,12 @@ open_permission_panes() {
 permissions_missing_since() {
   local from=$1 i
   for i in {1..20}; do   # the check runs just after Setu starts listening
-    tail -n +$(( from + 1 )) "$LOG_FILE" 2>/dev/null | grep -q "accessibility: " && break
+    grep -q "accessibility: " <(new_log_lines "$from") && break
     sleep 0.25
   done
-  tail -n +$(( from + 1 )) "$LOG_FILE" 2>/dev/null | grep -qE "(screen recording|accessibility): not granted"
+  grep -qE "(screen recording|accessibility): not granted" <(new_log_lines "$from")
 }
+
+new_log_lines() { tail -n +$(( $1 + 1 )) "$LOG_FILE" 2>/dev/null || true; }
 
 log_lines() { [[ -f $LOG_FILE ]] && wc -l < "$LOG_FILE" | tr -d ' ' || print 0; }

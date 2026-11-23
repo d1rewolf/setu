@@ -6,6 +6,7 @@ set -euo pipefail
 source "${0:A:h}/common.sh"
 
 remove_data=false
+(( $# <= 1 )) || fail "too many arguments. Usage: uninstall.sh [--remove-data]"
 case ${1:-} in
   "") ;;
   --remove-data) remove_data=true ;;
@@ -22,8 +23,8 @@ if ! $remove_data; then
   exit 0
 fi
 
+remove_keychain_from_search_list
 if [[ -f $KEYCHAIN ]]; then
-  remove_keychain_from_search_list
   security delete-keychain "$KEYCHAIN"
   say "Deleted the signing keychain $KEYCHAIN."
 fi
