@@ -125,6 +125,63 @@ public class MacDesktopInputTests
     }
 
     [Fact]
+    public void FocusWindow_OwnUntitledPopoverListedFirst_True()
+    {
+        // TextEdit's "could not be autosaved" popover is a separate, untitled layer-0 window of the same app and
+        // can be first in the on-screen list while the document window is the one in front.
+        var popover = new MacWindow(300, 200, "TextEdit", "", 0, 10, 20, 200, 80, true);
+        var helper = new MacWindow(301, 200, "TextEdit", null, 0, 10, 20, 200, 80, true);
+        var doc = new MacWindow(282, 200, "TextEdit", "smoke.txt", 0, 10, 20, 300, 200, true);
+        var sys = new FakeMacSystem
+        {
+            AllWindows = [popover, helper, doc],
+            OnScreenWindows = [popover, helper, doc],
+            RaiseWorks = false,
+        };
+        Assert.True(Desktop(sys).FocusWindow(282));
+        Assert.Empty(sys.Raised);
+    }
+
+    [Fact]
+    public void FocusWindow_OtherAppsWindowFirst_False()
+    {
+        var other = new MacWindow(400, 201, "Safari", "Apple", 0, 0, 0, 800, 600, true);
+        var doc = new MacWindow(282, 200, "TextEdit", "smoke.txt", 0, 10, 20, 300, 200, true);
+        var sys = new FakeMacSystem { AllWindows = [other, doc], OnScreenWindows = [other, doc], RaiseWorks = false };
+        Assert.False(Desktop(sys).FocusWindow(282));
+        Assert.Equal([doc], sys.Raised);
+    }
+
+    [Fact]
+    public void FocusWindow_OtherAppsUntitledWindowFirst_False()
+    {
+        var other = new MacWindow(400, 201, "Notification Center", null, 0, 0, 0, 300, 80, true);
+        var doc = new MacWindow(282, 200, "TextEdit", "smoke.txt", 0, 10, 20, 300, 200, true);
+        var sys = new FakeMacSystem { AllWindows = [other, doc], OnScreenWindows = [other, doc], RaiseWorks = false };
+        Assert.False(Desktop(sys).FocusWindow(282));
+    }
+
+    [Fact]
+    public void FocusWindow_SameAppOtherTitledWindowInFront_False()
+    {
+        var front = new MacWindow(281, 200, "TextEdit", "other.txt", 0, 10, 20, 300, 200, true);
+        var doc = new MacWindow(282, 200, "TextEdit", "smoke.txt", 0, 10, 20, 300, 200, true);
+        var sys = new FakeMacSystem { AllWindows = [front, doc], OnScreenWindows = [front, doc], RaiseWorks = false };
+        Assert.False(Desktop(sys).FocusWindow(282));
+    }
+
+    [Fact]
+    public void FocusWindow_NoTitlesVisible_FirstWindowOfFrontApp_True()
+    {
+        // Without Screen Recording macOS hides other apps' window names; then the app's first window counts.
+        var doc = new MacWindow(282, 200, "TextEdit", null, 0, 10, 20, 300, 200, true);
+        var back = new MacWindow(283, 200, "TextEdit", null, 0, 10, 20, 300, 200, true);
+        var sys = new FakeMacSystem { AllWindows = [doc, back], OnScreenWindows = [doc, back], RaiseWorks = false };
+        Assert.True(Desktop(sys).FocusWindow(282));
+        Assert.False(Desktop(sys).FocusWindow(283));
+    }
+
+    [Fact]
     public void FocusWindow_UnknownHandle_Throws()
     {
         var sys = new FakeMacSystem { AllWindows = [Window(4)] };

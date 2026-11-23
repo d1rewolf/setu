@@ -50,4 +50,27 @@ public class MacDesktopWindowsTests
         Assert.False(windows.Single(w => w.Handle == 10).Foreground);
         Assert.True(windows.Single(w => w.Handle == 11).Foreground);
     }
+
+    [Fact]
+    public void ListWindows_OwnUntitledPopoverFirst_MarksTitledWindowForeground()
+    {
+        var popover = new MacWindow(300, 200, "TextEdit", "", 0, 10, 20, 200, 80, true);
+        var doc = new MacWindow(282, 200, "TextEdit", "smoke.txt", 0, 10, 20, 300, 200, true);
+        var other = new MacWindow(400, 201, "Safari", "Apple", 0, 0, 0, 800, 600, true);
+        var sys = new FakeMacSystem
+        {
+            OwnPid = 100,
+            AllWindows = [popover, doc, other],
+            OnScreenWindows =
+            [
+                new(2, 100, "setu", "own", 0, 0, 0, 10, 10, true),
+                popover,
+                doc,
+                other,
+            ],
+        };
+        var windows = Desktop(sys).ListWindows();
+        Assert.True(windows.Single(w => w.Handle == 282).Foreground);
+        Assert.False(windows.Single(w => w.Handle == 400).Foreground);
+    }
 }

@@ -9,7 +9,8 @@ public sealed partial class MacDesktop
     private static readonly TimeSpan FocusPoll = TimeSpan.FromMilliseconds(50);
 
     /// <summary>
-    /// True once the window is the frontmost layer-0 window in the on-screen list. macOS may refuse or be slow;
+    /// True once the window's app is frontmost and the window is that app's foreground window (see
+    /// <see cref="ForegroundWindowId"/>: the app's own untitled popovers do not count). macOS may refuse or be slow;
     /// after <see cref="FocusWait"/> without it in front this returns false.
     /// </summary>
     public bool FocusWindow(long handle)

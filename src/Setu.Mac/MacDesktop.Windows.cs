@@ -23,11 +23,21 @@ public sealed partial class MacDesktop
         return result;
     }
 
-    /// <summary>The frontmost layer-0 window that is not Setu's own; the on-screen list is ordered front to back.</summary>
+    /// <summary>
+    /// The window in front. The frontmost app is the owner of the first layer-0, on-screen window that is not
+    /// Setu's own (the on-screen list is ordered front to back). Its foreground window is its first layer-0
+    /// on-screen window with a title, so an app's untitled popover, sheet or panel listed above its document
+    /// window does not count; when none of its windows has a title (macOS hides them without Screen Recording),
+    /// its first layer-0 window.
+    /// </summary>
     private uint? ForegroundWindowId()
     {
         var own = sys.OwnPid;
-        return sys.Windows(onScreenOnly: true).FirstOrDefault(w => w.Layer == 0 && w.Pid != own)?.Id;
+        var appWindows = sys.Windows(onScreenOnly: true).Where(w => w.Layer == 0 && w.OnScreen).ToList();
+        var first = appWindows.FirstOrDefault(w => w.Pid != own);
+        if (first is null) return null;
+        var frontApp = appWindows.Where(w => w.Pid == first.Pid).ToList();
+        return (frontApp.FirstOrDefault(w => !string.IsNullOrEmpty(w.Name)) ?? frontApp[0]).Id;
     }
 
     private static int Round(double points) => (int)Math.Round(points);
