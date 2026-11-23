@@ -114,27 +114,111 @@ public class MacDesktopInputTests
         Assert.Empty(sys.Posted);
     }
 
+    // Key codes: cmd 0x37, ctrl 0x3B, option 0x3A, shift 0x38. Flags: cmd 0x100000, shift 0x20000, ctrl 0x40000.
+
     [Fact]
-    public void SendKeys_FlagsOnTheKeysOwnEvents()
+    public void SendKeys_CmdTab_PressesAndReleasesCommandAroundTheKey()
     {
         var sys = new FakeMacSystem();
-        Desktop(sys).SendKeys([new KeyChord(["cmd", "shift"], "s"), new KeyChord([], "enter")]);
+        Desktop(sys).SendKeys(KeySpec.Parse("cmd+tab", KeyVocabulary.Mac));
         Assert.Equal<MacEvent>(
             [
-                new KeyEvent(0x01, Down: true, 0x120000),
-                new KeyEvent(0x01, Down: false, 0x120000),
-                new KeyEvent(0x24, Down: true, 0),
-                new KeyEvent(0x24, Down: false, 0),
+                new KeyEvent(0x37, Down: true, 0x100000),
+                new KeyEvent(0x30, Down: true, 0x100000),
+                new KeyEvent(0x30, Down: false, 0x100000),
+                new KeyEvent(0x37, Down: false, 0),
             ],
             sys.Posted);
     }
 
     [Fact]
-    public void SendKeys_ParsedFromMacVocabulary_DuplicateModifiersHarmless()
+    public void SendKeys_CmdShiftZ_ModifiersInFixedOrderWithCumulativeFlags()
+    {
+        var sys = new FakeMacSystem();
+        Desktop(sys).SendKeys(KeySpec.Parse("shift+cmd+z", KeyVocabulary.Mac));
+        Assert.Equal<MacEvent>(
+            [
+                new KeyEvent(0x37, Down: true, 0x100000),
+                new KeyEvent(0x38, Down: true, 0x120000),
+                new KeyEvent(0x06, Down: true, 0x120000),
+                new KeyEvent(0x06, Down: false, 0x120000),
+                new KeyEvent(0x38, Down: false, 0x100000),
+                new KeyEvent(0x37, Down: false, 0),
+            ],
+            sys.Posted);
+    }
+
+    [Fact]
+    public void SendKeys_AllFourModifiers_CmdCtrlOptionShiftThenReverse()
+    {
+        var sys = new FakeMacSystem();
+        Desktop(sys).SendKeys([new KeyChord(["shift", "option", "ctrl", "cmd"], "a")]);
+        Assert.Equal<MacEvent>(
+            [
+                new KeyEvent(0x37, Down: true, 0x100000),
+                new KeyEvent(0x3B, Down: true, 0x140000),
+                new KeyEvent(0x3A, Down: true, 0x1C0000),
+                new KeyEvent(0x38, Down: true, 0x1E0000),
+                new KeyEvent(0x00, Down: true, 0x1E0000),
+                new KeyEvent(0x00, Down: false, 0x1E0000),
+                new KeyEvent(0x38, Down: false, 0x1C0000),
+                new KeyEvent(0x3A, Down: false, 0x140000),
+                new KeyEvent(0x3B, Down: false, 0x100000),
+                new KeyEvent(0x37, Down: false, 0),
+            ],
+            sys.Posted);
+    }
+
+    [Fact]
+    public void SendKeys_DuplicateModifier_PressedOnce()
     {
         var sys = new FakeMacSystem();
         Desktop(sys).SendKeys(KeySpec.Parse("cmd+command+s", KeyVocabulary.Mac));
-        Assert.Equal<MacEvent>([new KeyEvent(0x01, true, 0x100000), new KeyEvent(0x01, false, 0x100000)], sys.Posted);
+        Assert.Equal<MacEvent>(
+            [
+                new KeyEvent(0x37, Down: true, 0x100000),
+                new KeyEvent(0x01, Down: true, 0x100000),
+                new KeyEvent(0x01, Down: false, 0x100000),
+                new KeyEvent(0x37, Down: false, 0),
+            ],
+            sys.Posted);
+    }
+
+    [Fact]
+    public void SendKeys_RepeatedModifierInChord_PressedOnce()
+    {
+        var sys = new FakeMacSystem();
+        Desktop(sys).SendKeys([new KeyChord(["cmd", "cmd"], "s")]);
+        Assert.Equal(2, sys.Posted.Count(e => e is KeyEvent { KeyCode: 0x37 }));
+    }
+
+    [Fact]
+    public void SendKeys_NoModifiers_JustTheKey()
+    {
+        var sys = new FakeMacSystem();
+        Desktop(sys).SendKeys(KeySpec.Parse("a", KeyVocabulary.Mac));
+        Assert.Equal<MacEvent>([new KeyEvent(0x00, Down: true, 0), new KeyEvent(0x00, Down: false, 0)], sys.Posted);
+    }
+
+    [Fact]
+    public void SendKeys_Sequence_ReleasesModifiersBetweenChords()
+    {
+        var sys = new FakeMacSystem();
+        Desktop(sys).SendKeys(KeySpec.Parse("cmd+a cmd+c enter", KeyVocabulary.Mac));
+        Assert.Equal<MacEvent>(
+            [
+                new KeyEvent(0x37, Down: true, 0x100000),
+                new KeyEvent(0x00, Down: true, 0x100000),
+                new KeyEvent(0x00, Down: false, 0x100000),
+                new KeyEvent(0x37, Down: false, 0),
+                new KeyEvent(0x37, Down: true, 0x100000),
+                new KeyEvent(0x08, Down: true, 0x100000),
+                new KeyEvent(0x08, Down: false, 0x100000),
+                new KeyEvent(0x37, Down: false, 0),
+                new KeyEvent(0x24, Down: true, 0),
+                new KeyEvent(0x24, Down: false, 0),
+            ],
+            sys.Posted);
     }
 
     [Fact]

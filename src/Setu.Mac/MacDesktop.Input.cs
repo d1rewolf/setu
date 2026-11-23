@@ -49,8 +49,10 @@ public sealed partial class MacDesktop
     private const ushort ReturnKey = 0x24; // kVK_Return
 
     /// <summary>
-    /// Each chord is the key's down and up events with the modifier flags set on both; the modifier keys
-    /// themselves are not pressed. Key codes follow the US layout's physical positions (see MacKeyCodes).
+    /// Each chord presses its modifier keys (cmd, ctrl, option, shift; each once), then the key, then releases
+    /// the modifiers in reverse order. Every event carries the flags of the modifiers held at that moment, so the
+    /// WindowServer and Dock (cmd+tab, cmd+space) and apps that track flagsChanged see the modifiers, not just
+    /// flags on the key. Key codes follow the US layout's physical positions (see MacKeyCodes).
     /// </summary>
     public void SendKeys(IReadOnlyList<KeyChord> chords)
     {
@@ -58,9 +60,20 @@ public sealed partial class MacDesktop
         foreach (var chord in chords)
         {
             var code = MacKeyCodes.Key(chord.Key);
-            var flags = MacKeyCodes.Flags(chord.Modifiers);
+            var modifiers = MacKeyCodes.ModifierKeys(chord.Modifiers);
+            ulong flags = 0;
+            foreach (var (modCode, flag) in modifiers)
+            {
+                flags |= flag;
+                events.Add(new KeyEvent(modCode, Down: true, flags));
+            }
             events.Add(new KeyEvent(code, Down: true, flags));
             events.Add(new KeyEvent(code, Down: false, flags));
+            for (var i = modifiers.Count - 1; i >= 0; i--)
+            {
+                flags &= ~modifiers[i].Flag;
+                events.Add(new KeyEvent(modifiers[i].KeyCode, Down: false, flags));
+            }
         }
         if (events.Count > 0) sys.Post(events);
     }

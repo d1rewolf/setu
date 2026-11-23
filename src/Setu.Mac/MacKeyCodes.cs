@@ -47,6 +47,27 @@ internal static class MacKeyCodes
     public static ushort Key(string key) =>
         Codes.TryGetValue(key, out var code) ? code : throw new ArgumentException($"No macOS key code for '{key}'", nameof(key));
 
+    /// <summary>
+    /// The modifier keys of a chord in press order (cmd, ctrl, option, shift), each once however often it is
+    /// named, as (kVK_* key code, CGEventFlags bit). Throws for an unknown modifier name.
+    /// </summary>
+    public static IReadOnlyList<(ushort KeyCode, ulong Flag)> ModifierKeys(IReadOnlyList<string> modifiers)
+    {
+        var flags = Flags(modifiers);
+        var keys = new List<(ushort, ulong)>();
+        foreach (var (code, flag) in ModifierOrder)
+            if ((flags & flag) != 0) keys.Add((code, flag));
+        return keys;
+    }
+
+    private static readonly (ushort KeyCode, ulong Flag)[] ModifierOrder =
+    [
+        (0x37, kCGEventFlagMaskCommand),   // kVK_Command
+        (0x3B, kCGEventFlagMaskControl),   // kVK_Control
+        (0x3A, kCGEventFlagMaskAlternate), // kVK_Option
+        (0x38, kCGEventFlagMaskShift),     // kVK_Shift
+    ];
+
     /// <summary>The CGEventFlags for canonical Mac modifier names (cmd ctrl option shift). A repeated name counts once.</summary>
     public static ulong Flags(IReadOnlyList<string> modifiers)
     {

@@ -65,4 +65,19 @@ public class MacKeyCodesTests
     {
         Assert.Equal(0x100000UL, MacKeyCodes.Flags(["cmd", "cmd"]));
     }
+
+    [Fact]
+    public void ModifierKeys_FixedOrderEachOnce()
+    {
+        Assert.Equal(
+            [((ushort)0x37, 0x100000UL), ((ushort)0x3B, 0x40000UL), ((ushort)0x3A, 0x80000UL), ((ushort)0x38, 0x20000UL)],
+            MacKeyCodes.ModifierKeys(["shift", "option", "cmd", "ctrl", "cmd"]));
+        Assert.Empty(MacKeyCodes.ModifierKeys([]));
+    }
+
+    [Fact]
+    public void ModifierKeys_UnknownModifier_Throws()
+    {
+        Assert.ThrowsAny<ArgumentException>(() => MacKeyCodes.ModifierKeys(["hyper"]));
+    }
 }
