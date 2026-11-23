@@ -35,6 +35,7 @@ public sealed class MacPlatformTests : IDisposable
         Assert.Equal(28591, parts.FileOptions.FallbackCodePage);
         Assert.Equal(LineEndings.Lf, parts.FileOptions.NewFileLineEndings);
         Assert.NotNull(parts.FileOptions.Protected.Match($"{Home}/Documents/x"));
+        Assert.Equal(TimeSpan.FromSeconds(120), parts.FileOptions.CallTimeLimit);
         Assert.Same(KeyVocabulary.Mac, parts.Keys);
         Assert.Equal(ShellFlavor.Zsh, parts.Shell);
         Assert.Null(parts.Zsh);

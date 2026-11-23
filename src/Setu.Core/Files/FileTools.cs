@@ -7,7 +7,12 @@ using ModelContextProtocol.Server;
 
 namespace Setu.Core.Files;
 
-public sealed record FileToolsOptions(int FallbackCodePage, LineEndings NewFileLineEndings, ProtectedPaths Protected);
+/// <param name="CallTimeLimit">
+/// How long one file-tool call may take before the agent gets an error instead (spec, Protected folders: a first touch
+/// of an unlisted protected folder on macOS waits on a prompt nobody answers). Null means no limit, as on Windows.
+/// </param>
+public sealed record FileToolsOptions(
+    int FallbackCodePage, LineEndings NewFileLineEndings, ProtectedPaths Protected, TimeSpan? CallTimeLimit = null);
 
 [McpServerToolType]
 public sealed class FileTools(RequestLog log, FileToolsOptions options)
@@ -342,8 +347,8 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
     /// ToolGuard.Run, plus on non-Windows a refused open (EPERM or EACCES, which .NET raises as
     /// UnauthorizedAccessException) becomes a plain "permission denied" for the path the agent gave.
     /// </summary>
-    private T Run<T>(string tool, string path, Func<T> body)
-        => ToolGuard.Run(log, tool, () =>
+    internal T Run<T>(string tool, string path, Func<T> body)
+        => ToolGuard.Run(log, tool, () => WithinTimeLimit(tool, () =>
         {
             try
             {
@@ -355,7 +360,30 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 PathResolver.Resolve(path, options.Protected);
                 throw new ToolInputException($"{path}: permission denied");
             }
-        });
+        }));
+
+    /// <summary>
+    /// Runs <paramref name="body"/> directly when there is no time limit. Otherwise runs it on the thread pool and
+    /// waits up to the limit, then gives the agent an error. The abandoned work keeps running in the background:
+    /// a thread blocked in the kernel on a privacy prompt cannot be cancelled, and the file tools take no
+    /// cancellation token. That is accepted; the request thread is what must not hang.
+    /// </summary>
+    private T WithinTimeLimit<T>(string tool, Func<T> body)
+    {
+        if (options.CallTimeLimit is not { } limit) return body();
+        var work = Task.Run(body);
+        if (Task.WaitAny([work], limit) < 0)
+        {
+            // Observe a late failure so it is not reported as an unobserved task exception.
+            work.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            throw new ToolInputException(TimeLimitMessage(tool, limit));
+        }
+        return work.GetAwaiter().GetResult(); // rethrows the body's own exception unwrapped
+    }
+
+    internal static string TimeLimitMessage(string tool, TimeSpan limit)
+        => $"{tool} did not finish within {(int)limit.TotalSeconds} seconds. A folder it touched may be waiting on a macOS permission prompt at the Mac, " +
+           "or the folder is very large. Narrow the path, or ask John to check the Mac's screen.";
 
     private bool IsProtectedLink(FileSystemInfo e)
         => !options.Protected.IsEmpty && e.LinkTarget is not null && options.Protected.Match(e.FullName) is not null;

@@ -18,6 +18,7 @@ public static class MacProtectedPaths
         "Pictures/Photos Library.photoslibrary",
         "Library/Calendars",
         "Library/CloudStorage", // third-party cloud providers
+        "Library/Photos", // first access waits on a prompt (found by the smoke run on the Mac)
     ];
 
     /// <summary>Removable and network volumes: every child of /Volumes, not /Volumes itself.</summary>

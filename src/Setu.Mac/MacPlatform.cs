@@ -27,7 +27,8 @@ public static class MacPlatform
             () => new ProcessGroupContainment(),
             new MacDetachedLauncher(log, protectedPaths),
             desktop,
-            new FileToolsOptions(28591, LineEndings.Lf, protectedPaths), // ISO-8859-1: every byte round-trips
+            // ISO-8859-1: every byte round-trips. The time limit turns a wait on an unlisted privacy prompt into an error.
+            new FileToolsOptions(28591, LineEndings.Lf, protectedPaths, TimeSpan.FromSeconds(120)),
             KeyVocabulary.Mac,
             ShellFlavor.Zsh,
             null,

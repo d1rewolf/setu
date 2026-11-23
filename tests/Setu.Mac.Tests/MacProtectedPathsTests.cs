@@ -8,7 +8,7 @@ public sealed class MacProtectedPathsTests
     [
         "Desktop", "Documents", "Downloads", "Library/Mobile Documents", "Library/Mail", "Library/Messages",
         "Library/Safari", "Library/Containers", "Library/Group Containers", "Pictures/Photos Library.photoslibrary",
-        "Library/Calendars", "Library/CloudStorage",
+        "Library/Calendars", "Library/CloudStorage", "Library/Photos",
     ];
 
     [Fact]
