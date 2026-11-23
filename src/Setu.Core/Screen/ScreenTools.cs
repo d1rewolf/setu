@@ -86,7 +86,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop, KeyVocabulary 
         "Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f24, enter tab esc backspace delete insert space up down left right home end pageup pagedown printscreen. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".";
 
     internal const string MacSendKeysDescription =
-        "Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f20, enter tab esc backspace delete space up down left right home end pageup pagedown. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".";
+        "Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f20, enter tab esc backspace delete space up down left right home end pageup pagedown. Examples: \"cmd+s\", \"cmd+w\", \"cmd+a delete\".";
 
     /// <summary>
     /// The send_keys tool with the platform's description (the keys differ). SendKeys has no [McpServerTool]

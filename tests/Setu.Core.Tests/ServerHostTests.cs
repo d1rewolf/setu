@@ -340,18 +340,20 @@ public sealed class ServerHostTests : IAsyncLifetime
 
         var start = Tool("start_process");
         Assert.Equal("Starts a program in the user's desktop session and returns its PID without waiting for it. Use this, not a shell command's own background launch, for GUI apps or anything you want to keep running after the call returns. A path ending in .app, or an app name that is not a program on PATH (e.g. TextEdit), starts through LaunchServices; if that app is already running it is brought to the front and its existing PID is returned.", start.Description);
-        Assert.Equal("Program path or name on PATH, or an app name or .app path, e.g. TextEdit.", ParamDescription(start, "path"));
+        Assert.Equal("Program path or name on PATH, or an app name or .app path, e.g. TextEdit. A bare name is looked up on /usr/bin:/bin:/usr/sbin:/sbin; give the full path for anything installed elsewhere (e.g. Homebrew).", ParamDescription(start, "path"));
         Assert.Equal("Optional command-line arguments as one string, split into arguments like a POSIX shell does (single quotes, double quotes and backslash), with no variable, ~ or wildcard expansion. For an app, absolute paths of existing files are opened as documents and the rest are passed to the app.", ParamDescription(start, "arguments"));
         Assert.Equal("Optional absolute working directory; a leading ~ is your home folder. Ignored when starting an app.", ParamDescription(start, "cwd"));
 
         var keys = Tool("send_keys");
-        Assert.Equal("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f20, enter tab esc backspace delete space up down left right home end pageup pagedown. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".", keys.Description);
+        Assert.Equal("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f20, enter tab esc backspace delete space up down left right home end pageup pagedown. Examples: \"cmd+s\", \"cmd+w\", \"cmd+a delete\".", keys.Description);
         Assert.Equal("Space-separated chords, e.g. \"ctrl+shift+s enter\".", ParamDescription(keys, "keys"));
 
         // The file tools' neutral path wording names both platforms on purpose; these three are the Mac's own.
+        // send_keys's "Modifiers on Windows: ..." sentence names both platforms on purpose too, so "on Windows"
+        // itself is not on this list; Windows-only keys, examples, shells and path syntax are.
         var own = string.Join("\n", new[] { start, keys, Tool("shell") }.Select(t => t.Description + t.JsonSchema.GetRawText()));
-        foreach (var windowsOnly in new[] { "notepad", "%VARS%", "On Windows", "insert", "printscreen", "f24", "PowerShell", "cmd.exe" })
-            Assert.DoesNotContain(windowsOnly, own);
+        foreach (var windowsOnly in new[] { "ctrl+s\"", "alt+f4", "ctrl+a", "insert", "printscreen", "f24", "notepad", "%VARS%", "powershell", "cmd.exe" })
+            Assert.DoesNotContain(windowsOnly, own, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>send_keys registered by hand still runs, with a ScreenTools from the request's services.</summary>

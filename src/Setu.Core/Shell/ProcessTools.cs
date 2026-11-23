@@ -41,7 +41,7 @@ public sealed class MacProcessTools(RequestLog log, IDetachedLauncher launcher, 
     [McpServerTool(Name = "start_process")]
     [Description("Starts a program in the user's desktop session and returns its PID without waiting for it. Use this, not a shell command's own background launch, for GUI apps or anything you want to keep running after the call returns. A path ending in .app, or an app name that is not a program on PATH (e.g. TextEdit), starts through LaunchServices; if that app is already running it is brought to the front and its existing PID is returned.")]
     public string StartProcess(
-        [Description("Program path or name on PATH, or an app name or .app path, e.g. TextEdit.")] string path,
+        [Description("Program path or name on PATH, or an app name or .app path, e.g. TextEdit. A bare name is looked up on /usr/bin:/bin:/usr/sbin:/sbin; give the full path for anything installed elsewhere (e.g. Homebrew).")] string path,
         [Description("Optional command-line arguments as one string, split into arguments like a POSIX shell does (single quotes, double quotes and backslash), with no variable, ~ or wildcard expansion. For an app, absolute paths of existing files are opened as documents and the rest are passed to the app.")] string? arguments = null,
         [Description("Optional absolute working directory; a leading ~ is your home folder. Ignored when starting an app.")] string? cwd = null)
         => ProcessStart.Run(log, launcher, options, path, arguments, cwd);
