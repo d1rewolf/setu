@@ -18,7 +18,9 @@ public static class MacProtectedPaths
         "Pictures/Photos Library.photoslibrary",
         "Library/Calendars",
         "Library/CloudStorage", // third-party cloud providers
-        "Library/Photos", // first access waits on a prompt (found by the smoke run on the Mac)
+        // Library/Photos and Movies/TV were measured on the Mac (first access waits on a prompt); Music/Music is listed by analogy (same TCC service as Movies/TV).
+        "Library/Photos",
+        "Movies/TV", "Music/Music", // the TV and Music apps' media libraries
     ];
 
     /// <summary>Removable and network volumes: every child of /Volumes, not /Volumes itself.</summary>
