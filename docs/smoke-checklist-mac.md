@@ -89,7 +89,7 @@ Fill this in after the run. Use PASS or FAIL, and a short note for anything that
 
 | Item | Result | Notes |
 |---|---|---|
-| Before the grants: screenshot and click errors, list_dir works | PASS | Covered by the spike, see [spike results](superpowers/specs/2026-11-22-setu-mac-spike-results.md) |
+| Before the grants: screenshot and click errors, list_dir works | partly | The spike showed every permission check false before the grants ([spike results](superpowers/specs/2026-11-22-setu-mac-spike-results.md)); the exact tool error text was not seen, because the real build came after the grants |
 | Grants given at the Mac, then the smoke client passes | PASS | 15 of 15 |
 | Smoke: auth_rejects_bad_token | PASS | |
 | Smoke: list_tools_complete | PASS | |
@@ -109,13 +109,15 @@ Fill this in after the run. Use PASS or FAIL, and a short note for anything that
 | No Dock icon and no menu bar | PASS | |
 | Second manual start exits with code 2 | PASS | |
 | Permissions survive updates (no one at the Mac) | PASS | Several updates, including one after stopping Setu |
-| Restarts after kill -9 (time to come back) | PASS | |
+| Restarts after kill -9 (time to come back) | PASS | Back and listening within 12 s |
 | start_process program survives an update | PASS | A `/bin/sleep` kept running across an update |
 | Locked screen: screenshot errors, list_dir works | PASS | |
-| Locked screen: screenshot works again after unlocking | pending | |
+| Locked screen: screenshot works again after unlocking | PASS | Locked with `send_keys ctrl+cmd+q`; after unlocking, all 15 smoke checks passed |
 | Secure input: typing works and the result has the note | PASS | A note, not a refusal; the typed text got through |
 | Local Network: `nc -z` to a LAN host through `shell` | PASS | 172.16.1.4:22 |
 | Protected folder through `shell`: `ls ~/Documents` fails at once, no prompt | PASS | "Operation not permitted" in 0.04 s |
 | Keep-awake: both assertions in `pmset -g assertions` | PASS | |
-| Keep-awake: still awake and unlocked after idling past the timeouts | pending | |
+| Keep-awake: still awake and unlocked after idling past the timeouts | pending | Not run: the Mac was locked by hand or in use all day |
+| `type_text` line breaks: "a\r\nb\nc" gives three lines | PASS | Each break pressed Return once; CRLF counted once |
+| `send_keys cmd+tab` switches apps | PASS | Failed before modifier keys were pressed for real (fixed in 5b9a04f); now toggles TextEdit and Finder every time |
 | Monthly prompt: date seen, screenshot works while it waits | pending | Cannot be forced; record it when it happens |
