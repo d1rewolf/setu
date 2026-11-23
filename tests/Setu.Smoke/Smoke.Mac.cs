@@ -80,16 +80,37 @@ sealed partial class Smoke
     {
         try
         {
-            var sb = new StringBuilder();
-            if (_sleepPid is { } p) sb.Append($"kill {p} 2>/dev/null; ");
             if (_textEditStarted)
             {
-                // Only the smoke document goes if the person already had TextEdit open; the app itself
-                // quits only when this run started it.
-                sb.Append(_textEditWasRunning
-                    ? "osascript -e 'tell application \"TextEdit\" to close (every document whose name is \"smoke.txt\") saving no' >/dev/null 2>&1; "
-                    : "osascript -e 'tell application \"TextEdit\" to close every document saving no' -e 'tell application \"TextEdit\" to quit' >/dev/null 2>&1; ");
+                // The smoke document always goes, unsaved, even when TextEdit was already running (for example
+                // left open by an earlier failed run); otherwise it would stay open on a deleted file. The app
+                // itself quits only when this run started it.
+                var script = new List<string>
+                {
+                    "if application \"TextEdit\" is running then",
+                    "tell application \"TextEdit\"",
+                    "repeat 20 times",
+                    "if not (exists document \"smoke.txt\") then exit repeat",
+                    "close document \"smoke.txt\" saving no",
+                    "end repeat",
+                };
+                if (!_textEditWasRunning) script.AddRange(["close every document saving no", "quit"]);
+                script.AddRange(["end tell", "end if"]);
+                var command = "osascript " + string.Join(' ', script.Select(line => "-e " + ShQuote(line)));
+                var r = await Call("shell", ("command", command), ("timeout_s", 30));
+                if (r.IsError || !r.Text.Contains("exit_code=0 "))
+                    Console.WriteLine($"WARN cleanup could not close the TextEdit smoke document: {r.Text.Trim().ReplaceLineEndings(" | ")}");
             }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"WARN cleanup failed: {Describe(e)}");
+        }
+
+        try
+        {
+            var sb = new StringBuilder();
+            if (_sleepPid is { } p) sb.Append($"kill {p} 2>/dev/null; ");
             sb.Append("rm -rf /tmp/setu-smoke");
             await _client!.CallToolAsync("shell", new Dictionary<string, object?> { ["command"] = sb.ToString(), ["timeout_s"] = 30 });
         }
@@ -266,13 +287,22 @@ sealed partial class Smoke
         await Task.Delay(300);
 
         // The Mac's clipboard is overwritten here (see docs/smoke-checklist.md).
-        await Sh("printf wmcp-before | pbcopy");
+        const string sentinel = "setu-before";
+        await Sh($"printf {sentinel} | pbcopy");
         await Ok("send_keys", ("keys", "cmd+a"));
         await Ok("type_text", ("text", "smoke"));
         await Task.Delay(500);
         await Ok("send_keys", ("keys", "cmd+a cmd+c"));
-        await Task.Delay(500);
+        // TextEdit puts the copy on the pasteboard a moment after cmd+c, so wait for it to change.
         var clip = await Sh("pbpaste");
-        Require(clip == "smoke", $"clipboard after cmd+a cmd+c was '{clip}', expected 'smoke'");
+        var waited = Stopwatch.StartNew();
+        while (clip == sentinel && waited.Elapsed < TimeSpan.FromSeconds(3))
+        {
+            await Task.Delay(100);
+            clip = await Sh("pbpaste");
+        }
+        // Case-insensitive because TextEdit auto-capitalises the first word: the document holds "Smoke".
+        Require(string.Equals(clip, "smoke", StringComparison.OrdinalIgnoreCase),
+            $"clipboard after cmd+a cmd+c was '{clip}', expected 'smoke' (any case)");
     }
 }
