@@ -292,6 +292,10 @@ sealed partial class Smoke
         await Ok("send_keys", ("keys", "cmd+a"));
         await Ok("type_text", ("text", "smoke"));
         await Task.Delay(500);
+        // TextEdit offers to auto-capitalise "smoke" a moment after typing, and that pending
+        // correction swallows the next key chord. An arrow key dismisses it (measured on the Mac).
+        await Ok("send_keys", ("keys", "right"));
+        await Task.Delay(300);
         await Ok("send_keys", ("keys", "cmd+a cmd+c"));
         // TextEdit puts the copy on the pasteboard a moment after cmd+c, so wait for it to change.
         var clip = await Sh("pbpaste");
