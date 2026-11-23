@@ -34,13 +34,15 @@ static IDisposable? AcquireSingleInstance()
     return null;
 }
 
-return SetuStartup.Run(new PlatformParts(
+// The builder overload builds the Win32 parts inside startup's failure handling and hands them the one
+// RequestLog the whole run writes setu.log through.
+return SetuStartup.Run(data, log => new PlatformParts(
     data,
     AcquireSingleInstance,
     new TokenFileAcl(),
     KeepAwake.Start,
     () => new JobObjectContainment(),
-    new DetachedLauncher(new RequestLog(Path.Combine(data, "setu.log"))),
+    new DetachedLauncher(log),
     new Win32Desktop(),
     new FileToolsOptions(AnsiCodePage.Current, LineEndings.Crlf, ProtectedPaths.None),
     KeyVocabulary.Windows,
