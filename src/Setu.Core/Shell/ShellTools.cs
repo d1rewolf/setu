@@ -39,7 +39,7 @@ public sealed class ShellTools(RequestLog log, IProcessRunner runner, IDetachedL
         => ToolGuard.Run(log, "start_process", () =>
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ToolInputException("path is required");
-            var dir = cwd is null ? null : PathResolver.Resolve(cwd);
+            var dir = cwd is null ? null : PathResolver.Resolve(cwd, ProtectedPaths.None);
             var pid = launcher.Start(path, arguments, dir);
             return $"Started {path} as PID {pid}";
         });
@@ -55,7 +55,7 @@ public sealed class ShellTools(RequestLog log, IProcessRunner runner, IDetachedL
         {
             if (timeoutSeconds is < MinTimeoutSeconds or > MaxTimeoutSeconds)
                 throw new ToolInputException($"timeout_s must be between {MinTimeoutSeconds} and {MaxTimeoutSeconds}");
-            var dir = cwd is null ? null : PathResolver.Resolve(cwd);
+            var dir = cwd is null ? null : PathResolver.Resolve(cwd, ProtectedPaths.None);
             var result = await runner.RunAsync(
                 new ProcessRequest(fileName, arguments, dir, TimeSpan.FromSeconds(timeoutSeconds)),
                 ct);

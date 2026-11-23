@@ -9,7 +9,7 @@ public sealed class FileToolsListSearchTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("wmcp-ls-").FullName;
 
-    private FileTools Tools() => new(RequestLog.Null, new FileToolsOptions(1252));
+    private FileTools Tools() => new(RequestLog.Null, new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None));
 
     private string P(string name) => Path.Combine(_dir, name);
 

@@ -12,7 +12,7 @@ public class PathResolverTests
         Environment.SetEnvironmentVariable("WMCP_T", dir);
         try
         {
-            var result = PathResolver.Resolve("%WMCP_T%/a.txt");
+            var result = PathResolver.Resolve("%WMCP_T%/a.txt", ProtectedPaths.None);
             Assert.EndsWith("a.txt", result);
             Assert.StartsWith(dir.TrimEnd('/', '\\'), result);
         }
@@ -25,6 +25,6 @@ public class PathResolverTests
     [Fact]
     public void Resolve_Relative_Throws()
     {
-        Assert.Throws<ToolInputException>(() => PathResolver.Resolve("a.txt"));
+        Assert.Throws<ToolInputException>(() => PathResolver.Resolve("a.txt", ProtectedPaths.None));
     }
 }

@@ -7,7 +7,7 @@ using ModelContextProtocol.Server;
 
 namespace Setu.Core.Files;
 
-public sealed record FileToolsOptions(int AnsiCodePage);
+public sealed record FileToolsOptions(int FallbackCodePage, LineEndings NewFileLineEndings, ProtectedPaths Protected);
 
 [McpServerToolType]
 public sealed class FileTools(RequestLog log, FileToolsOptions options)
@@ -20,19 +20,19 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
     [McpServerTool(Name = "read_file")]
     [Description("Reads a text file and returns it with numbered lines (like cat -n). The first line is a header with the file's encoding, line endings and total line count.")]
     public string ReadFile(
-        [Description("Absolute Windows path. %VARS% are expanded.")] string path,
+        [Description("Absolute path. On Windows %VARS% are expanded; on macOS a leading ~ is your home folder.")] string path,
         [Description("1-based line number to start at.")] int offset = 1,
         [Description("Maximum number of lines to return.")] int limit = 2000)
-        => ToolGuard.Run(log, "read_file", () =>
+        => Run("read_file", path, () =>
         {
             if (offset < 1) throw new ToolInputException("offset must be 1 or greater");
             if (limit < 1) throw new ToolInputException("limit must be 1 or greater");
-            var full = PathResolver.Resolve(path);
+            var full = PathResolver.Resolve(path, options.Protected);
             var bytes = ReadAllShared(full);
             if (TextFormat.LooksBinary(bytes))
                 throw new ToolInputException($"Binary file; read_file only reads text: {path}");
 
-            var format = TextFormat.Detect(bytes, options.AnsiCodePage);
+            var format = TextFormat.Detect(bytes, options.FallbackCodePage);
             var text = Encoding.GetEncoding(format.Encoding.CodePage).GetString(bytes.AsSpan(format.PreambleLength));
             var lines = text.Split('\n').ToList();
             if (lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
@@ -56,15 +56,15 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
         });
 
     [McpServerTool(Name = "write_file")]
-    [Description("Writes a text file, replacing it if it exists. An existing file keeps its encoding and line endings unless overridden; a new file is UTF-8 without BOM with CRLF line endings.")]
+    [Description("Writes a text file, replacing it if it exists. An existing file keeps its encoding and line endings unless overridden; a new file is UTF-8 without BOM, with CRLF line endings on Windows and LF on macOS.")]
     public string WriteFile(
-        [Description("Absolute Windows path. %VARS% are expanded. The parent directory must exist.")] string path,
+        [Description("Absolute path. On Windows %VARS% are expanded; on macOS a leading ~ is your home folder. The parent directory must exist.")] string path,
         [Description("Full file content. Newlines are converted to the chosen line endings.")] string content,
         [Description("Optional: utf8, utf8bom, utf16le, utf16be or ansi.")] string? encoding = null,
         [Description("Optional: crlf or lf.")] string? line_endings = null)
-        => ToolGuard.Run(log, "write_file", () =>
+        => Run("write_file", path, () =>
         {
-            var full = PathResolver.Resolve(path);
+            var full = PathResolver.Resolve(path, options.Protected);
             var dir = Path.GetDirectoryName(full)!;
             if (!Directory.Exists(dir)) throw new ToolInputException($"Parent directory does not exist: {dir}");
 
@@ -74,14 +74,19 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 var current = ReadAllShared(full);
                 if (encoding is null && TextFormat.LooksBinary(current))
                     throw new ToolInputException($"Existing file looks binary; pass encoding explicitly to overwrite it: {path}");
-                existing = TextFormat.Detect(current, options.AnsiCodePage);
+                existing = TextFormat.Detect(current, options.FallbackCodePage);
             }
 
             var kind = encoding is null
                 ? existing?.Kind ?? FileEncodingKind.Utf8
                 : ParseEncoding(encoding);
             var crlf = line_endings is null
-                ? existing is null || existing.LineEndings is not LineEndings.Lf
+                ? existing?.LineEndings switch
+                {
+                    LineEndings.Lf => false,
+                    LineEndings.Mixed or LineEndings.Crlf => true,
+                    _ => options.NewFileLineEndings == LineEndings.Crlf, // new file, or an existing one with no line breaks
+                }
                 : ParseLineEndings(line_endings);
 
             var normalized = content.Replace("\r\n", "\n").Replace('\r', '\n');
@@ -105,19 +110,19 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
     [McpServerTool(Name = "edit_file")]
     [Description("Replaces an exact string in a text file. The file keeps its encoding, BOM and line endings, and bytes outside the replaced text are unchanged. old_string must match exactly once unless replace_all is true.")]
     public string EditFile(
-        [Description("Absolute Windows path. %VARS% are expanded.")] string path,
+        [Description("Absolute path. On Windows %VARS% are expanded; on macOS a leading ~ is your home folder.")] string path,
         [Description("Exact text to find. Must not be empty. On a CRLF file, \\n is treated as \\r\\n.")] string old_string,
         [Description("Replacement text. On a CRLF file, \\n is written as \\r\\n.")] string new_string,
         [Description("Replace every occurrence instead of requiring exactly one.")] bool replace_all = false)
-        => ToolGuard.Run(log, "edit_file", () =>
+        => Run("edit_file", path, () =>
         {
             if (old_string.Length == 0) throw new ToolInputException("old_string must not be empty");
-            var full = PathResolver.Resolve(path);
+            var full = PathResolver.Resolve(path, options.Protected);
             var bytes = ReadAllShared(full);
             if (TextFormat.LooksBinary(bytes))
                 throw new ToolInputException($"Binary file; edit_file only edits text: {path}");
 
-            var format = TextFormat.Detect(bytes, options.AnsiCodePage);
+            var format = TextFormat.Detect(bytes, options.FallbackCodePage);
             if (format.LineEndings == LineEndings.Crlf)
             {
                 old_string = LoneLf.Replace(old_string, "\r\n");
@@ -128,7 +133,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             // byte of a double-byte character and corrupt the file, so only single-byte code pages are edited.
             if (format.Kind == FileEncodingKind.Ansi && !StrictEncoding(format.Kind).IsSingleByte)
                 throw new ToolInputException(
-                    $"edit_file cannot safely edit this file: it is in the ANSI code page {options.AnsiCodePage}, which uses double-byte characters. " +
+                    $"edit_file cannot safely edit this file: it is in the ANSI code page {options.FallbackCodePage}, which uses double-byte characters. " +
                     "Read it with read_file and write the whole file back with write_file instead.");
 
             var enc = StrictEncoding(format.Kind);
@@ -156,18 +161,18 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
     [McpServerTool(Name = "list_dir")]
     [Description("Lists a directory, one entry per line: type (d or f), size in bytes, last write time (local, ISO-8601 with offset), name, separated by tabs. The last line is '<shown> of <total> entries'. Use sort=time with descending=true to find the newest file.")]
     public string ListDir(
-        [Description("Absolute Windows path of the directory. %VARS% are expanded.")] string path,
-        [Description("Optional Windows wildcard on the entry name, such as *.mkv.")] string? pattern = null,
+        [Description("Absolute path of the directory. On Windows %VARS% are expanded; on macOS a leading ~ is your home folder.")] string path,
+        [Description("Optional wildcard on the entry name, such as *.mkv.")] string? pattern = null,
         [Description("Sort key: name, time or size. Directories come first only when sorting by name.")] string sort = "name",
         [Description("Reverse the sort order (newest or largest first).")] bool descending = false,
         [Description("Maximum number of entries to return.")] int limit = 500)
-        => ToolGuard.Run(log, "list_dir", () =>
+        => Run("list_dir", path, () =>
         {
             var key = sort.ToLowerInvariant();
             if (key is not ("name" or "time" or "size"))
                 throw new ToolInputException($"Unknown sort '{sort}'; use name, time or size");
             if (limit < 1) throw new ToolInputException("limit must be 1 or greater");
-            var full = PathResolver.Resolve(path);
+            var full = PathResolver.Resolve(path, options.Protected);
             if (!Directory.Exists(full)) throw new ToolInputException($"Directory does not exist: {path}");
 
             var entries = new DirectoryInfo(full)
@@ -203,17 +208,17 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
     [McpServerTool(Name = "search")]
     [Description("Searches a directory tree recursively by file name, by file content, or both. Content matches are returned as 'path:line: text'; name-only matches as 'path'. Binary files and files over 10 MiB are skipped for content search.")]
     public string Search(
-        [Description("Absolute Windows path of the directory to search. %VARS% are expanded.")] string path,
-        [Description("Optional Windows wildcard on the file name, such as *.log.")] string? name_pattern = null,
+        [Description("Absolute path of the directory to search. On Windows %VARS% are expanded; on macOS a leading ~ is your home folder.")] string path,
+        [Description("Optional wildcard on the file name, such as *.log.")] string? name_pattern = null,
         [Description("Optional .NET regular expression matched against each line of text files.")] string? content_regex = null,
         [Description("Maximum number of matches to return (clamped to 2000).")] int limit = 200)
-        => ToolGuard.Run(log, "search", () =>
+        => Run("search", path, () =>
         {
             if (string.IsNullOrEmpty(name_pattern) && string.IsNullOrEmpty(content_regex))
                 throw new ToolInputException("Provide name_pattern, content_regex or both");
             if (limit < 1) throw new ToolInputException("limit must be 1 or greater");
             limit = Math.Min(limit, MaxSearchLimit);
-            var full = PathResolver.Resolve(path);
+            var full = PathResolver.Resolve(path, options.Protected);
             if (!Directory.Exists(full)) throw new ToolInputException($"Directory does not exist: {path}");
 
             Regex? regex = null;
@@ -245,9 +250,21 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             }
 
             // AttributesToSkip = 0: Hidden and System files and directories (such as AppData) are searched too,
-            // as list_dir shows them.
+            // as list_dir shows them. A protected folder is never entered: even looking inside could block on a prompt.
+            var skippedProtected = new List<string>();
             var options2 = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
-            foreach (var file in Directory.EnumerateFiles(full, "*", options2))
+            var files = new FileSystemEnumerable<string>(full, static (ref entry) => entry.ToFullPath(), options2)
+            {
+                ShouldIncludePredicate = static (ref entry) => !entry.IsDirectory,
+                ShouldRecursePredicate = (ref entry) =>
+                {
+                    var dir = entry.ToFullPath();
+                    if (options.Protected.Match(dir) is null) return true;
+                    skippedProtected.Add(dir);
+                    return false;
+                },
+            };
+            foreach (var file in files)
             {
                 if (!string.IsNullOrEmpty(name_pattern)
                     && !FileSystemName.MatchesSimpleExpression(name_pattern, Path.GetFileName(file), true))
@@ -272,7 +289,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 }
                 if (TextFormat.LooksBinary(bytes)) continue;
 
-                var format = TextFormat.Detect(bytes, options.AnsiCodePage);
+                var format = TextFormat.Detect(bytes, options.FallbackCodePage);
                 var text = LenientEncoding(format.Kind).GetString(bytes.AsSpan(format.PreambleLength));
                 var lineNo = 0;
                 try
@@ -300,7 +317,27 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             if (unreadable > 0) sb.Append($"[skipped {unreadable} unreadable file(s)]\n");
             foreach (var f in timedOut) sb.Append($"[regex timed out after 2 s, skipped rest of file: {f}]\n");
             if (reached) sb.Append("[limit reached]\n");
+            if (skippedProtected.Count > 0) sb.Append($"skipped protected folders: {string.Join(", ", skippedProtected)}\n");
             return sb.ToString();
+        });
+
+    /// <summary>
+    /// ToolGuard.Run, plus on non-Windows a refused open (EPERM or EACCES, which .NET raises as
+    /// UnauthorizedAccessException) becomes a plain "permission denied" for the path the agent gave.
+    /// </summary>
+    private T Run<T>(string tool, string path, Func<T> body)
+        => ToolGuard.Run(log, tool, () =>
+        {
+            try
+            {
+                return body();
+            }
+            catch (UnauthorizedAccessException) when (!OperatingSystem.IsWindows())
+            {
+                // Resolve throws the protected-folder message when the path matches one.
+                PathResolver.Resolve(path, options.Protected);
+                throw new ToolInputException($"{path}: permission denied");
+            }
         });
 
     private Encoding LenientEncoding(FileEncodingKind kind)
@@ -311,7 +348,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             FileEncodingKind.Utf8 or FileEncodingKind.Utf8Bom => new UTF8Encoding(false),
             FileEncodingKind.Utf16Le => new UnicodeEncoding(false, false),
             FileEncodingKind.Utf16Be => new UnicodeEncoding(true, false),
-            _ => Encoding.GetEncoding(options.AnsiCodePage),
+            _ => Encoding.GetEncoding(options.FallbackCodePage),
         };
     }
 
@@ -326,7 +363,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             FileEncodingKind.Utf8Bom => new UTF8Encoding(true, true),
             FileEncodingKind.Utf16Le => new UnicodeEncoding(false, true, true),
             FileEncodingKind.Utf16Be => new UnicodeEncoding(true, true, true),
-            _ => Encoding.GetEncoding(options.AnsiCodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback),
+            _ => Encoding.GetEncoding(options.FallbackCodePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback),
         };
     }
 

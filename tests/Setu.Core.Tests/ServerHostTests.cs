@@ -27,7 +27,7 @@ public sealed class ServerHostTests : IAsyncLifetime
         Directory.CreateDirectory(_dir);
         _app = ServerHost.Build(new ServerHostSettings(
             IPAddress.Loopback, 0, Token, new RequestLog(Path.Combine(_dir, "requests.log")),
-            new FileToolsOptions(1252), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows));
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows));
         await _app.StartAsync(TestContext.Current.CancellationToken);
         _baseUrl = _app.Urls.Single().TrimEnd('/');
     }
@@ -132,7 +132,7 @@ public sealed class ServerHostTests : IAsyncLifetime
         {
             app = ServerHost.Build(new ServerHostSettings(
                 IPAddress.Loopback, 0, Token, RequestLog.Null,
-                new FileToolsOptions(1252), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows));
+                new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows));
             await app.StartAsync(TestContext.Current.CancellationToken);
             var url = Assert.Single(app.Urls);
             Assert.StartsWith("http://127.0.0.1:", url);
@@ -153,7 +153,7 @@ public sealed class ServerHostTests : IAsyncLifetime
     {
         Assert.Throws<ArgumentException>(() => ServerHost.Build(new ServerHostSettings(
             IPAddress.Any, 0, Token, RequestLog.Null,
-            new FileToolsOptions(1252), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows)));
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows)));
     }
 
     [Theory]

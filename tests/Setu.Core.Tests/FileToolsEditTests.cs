@@ -8,7 +8,7 @@ public sealed class FileToolsEditTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("wmcp-edit-").FullName;
 
-    private FileTools Tools() => new(RequestLog.Null, new FileToolsOptions(1252));
+    private FileTools Tools() => new(RequestLog.Null, new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None));
 
     private string P(string name) => Path.Combine(_dir, name);
 
@@ -52,7 +52,7 @@ public sealed class FileToolsEditTests : IDisposable
         // Shift-JIS katakana A (0x83 0x41) then 'a'. A 1-byte search for "A" (0x41) would hit its trail byte.
         byte[] before = [0x83, 0x41, 0x61];
         File.WriteAllBytes(path, before);
-        var tools = new FileTools(RequestLog.Null, new FileToolsOptions(932));
+        var tools = new FileTools(RequestLog.Null, new FileToolsOptions(932, LineEndings.Crlf, ProtectedPaths.None));
         var ex = Assert.Throws<McpException>(() => tools.EditFile(path, "A", "B"));
         Assert.Contains("932", ex.Message);
         Assert.Contains("write_file", ex.Message);

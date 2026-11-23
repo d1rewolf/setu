@@ -72,7 +72,7 @@ try
     }
 
     var app = ServerHost.Build(new ServerHostSettings(
-        IPAddress.Loopback, port, token, log, new FileToolsOptions(AnsiCodePage.Current),
+        IPAddress.Loopback, port, token, log, new FileToolsOptions(AnsiCodePage.Current, LineEndings.Crlf, ProtectedPaths.None),
         () => new JobObjectContainment(), new DetachedLauncher(log), new Win32Desktop(), KeyVocabulary.Windows));
     var started = log;
     app.Lifetime.ApplicationStarted.Register(() => started.Write($"listening on http://127.0.0.1:{port}/mcp"));
