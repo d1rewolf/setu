@@ -58,6 +58,11 @@ internal static unsafe partial class CoreGraphics
     [return: MarshalAs(UnmanagedType.U1)]
     internal static partial bool CGPreflightPostEventAccess();
 
+    /// <summary>Shows the Screen Recording prompt once per app (macOS decides); returns whether access is granted now.</summary>
+    [LibraryImport(Lib)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static partial bool CGRequestScreenCaptureAccess();
+
     /// <summary>Copy: release the result. A CFArray of CFDictionary; front to back with OnScreenOnly.</summary>
     [LibraryImport(Lib)]
     internal static partial nint CGWindowListCopyWindowInfo(uint option, uint relativeToWindow);

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Setu.Core/Setu.Core.csproj" />
     <Project Path="src/Setu.Mac/Setu.Mac.csproj" />
+    <Project Path="src/Setu.MacApp/Setu.MacApp.csproj" />
     <Project Path="src/Setu.Win32/Setu.Win32.csproj" />
     <Project Path="src/Setu/Setu.csproj" />
   </Folder>

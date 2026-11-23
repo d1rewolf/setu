@@ -2,10 +2,16 @@ using System.Diagnostics;
 
 namespace Setu.Mac;
 
-/// <summary>Runs a program with stdin closed, stdout discarded and stderr collected; kills it on timeout.</summary>
+/// <summary>Runs a program with stdin closed and stdout and stderr collected; kills it on timeout.</summary>
 internal sealed class ProcessCommandRunner : ICommandRunner
 {
     public (int Exit, string Stderr) Run(string file, IReadOnlyList<string> args, TimeSpan timeout)
+    {
+        var (exit, _, stderr) = RunCapture(file, args, timeout);
+        return (exit, stderr);
+    }
+
+    public (int Exit, string Stdout, string Stderr) RunCapture(string file, IReadOnlyList<string> args, TimeSpan timeout)
     {
         var start = new ProcessStartInfo(file)
         {
@@ -25,10 +31,9 @@ internal sealed class ProcessCommandRunner : ICommandRunner
         {
             try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
             process.WaitForExit();
-            return (-1, $"{Path.GetFileName(file)} did not finish within {timeout.TotalSeconds:0} s");
+            return (-1, "", $"{Path.GetFileName(file)} did not finish within {timeout.TotalSeconds:0} s");
         }
         process.WaitForExit(); // let the async readers reach end of stream
-        _ = stdout.GetAwaiter().GetResult();
-        return (process.ExitCode, stderr.GetAwaiter().GetResult());
+        return (process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
     }
 }

@@ -29,24 +29,68 @@ public static class SetuStartup
     public static int Run(PlatformParts parts) => Run(parts, CancellationToken.None);
 
     /// <summary>Cancelling <paramref name="stop"/> stops the app gracefully and <c>Run</c> returns 0.</summary>
-    public static int Run(PlatformParts parts, CancellationToken stop)
+    public static int Run(PlatformParts parts, CancellationToken stop) => Run(parts, null, stop);
+
+    /// <summary>
+    /// Builds the parts inside startup's failure handling, so a part whose constructor throws ends in a logged
+    /// exit code 1, and hands <paramref name="build"/> the one <see cref="RequestLog"/> the whole run writes to
+    /// (two RequestLog instances on one file would not serialize their writes). The parts must use
+    /// <paramref name="dataDirectory"/>.
+    /// </summary>
+    public static int Run(string dataDirectory, Func<RequestLog, PlatformParts> build) =>
+        Run(dataDirectory, build, CancellationToken.None);
+
+    /// <inheritdoc cref="Run(string, Func{RequestLog, PlatformParts})"/>
+    public static int Run(string dataDirectory, Func<RequestLog, PlatformParts> build, CancellationToken stop)
+    {
+        var log = new RequestLog(Path.Combine(dataDirectory, "setu.log"));
+        PlatformParts parts;
+        try
+        {
+            parts = build(log);
+            if (parts.DataDirectory != dataDirectory)
+                throw new ArgumentException($"The parts use {parts.DataDirectory}, not {dataDirectory}.", nameof(build));
+        }
+        catch (Exception ex)
+        {
+            // Best effort, as for a second instance: the log may not be writable; RequestLog swallows failures.
+            try { Directory.CreateDirectory(dataDirectory); } catch (Exception) { }
+            return Fail(log, 1, ex.Message.ReplaceLineEndings(" "));
+        }
+        return Run(parts, log, stop);
+    }
+
+    private static int Fail(RequestLog log, int code, string message)
+    {
+        log.Write($"startup failed: {message}");
+        Console.Error.WriteLine(message);
+        return code;
+    }
+
+    private static int Run(PlatformParts parts, RequestLog? shared, CancellationToken stop)
     {
         var data = parts.DataDirectory;
         var log = RequestLog.Null;
+        RequestLog OpenLog() => shared ?? new RequestLog(Path.Combine(data, "setu.log"));
+        int Fail(int code, string message) => SetuStartup.Fail(log, code, message);
 
-        int Fail(int code, string message)
+        IDisposable? acquired;
+        try
         {
-            log.Write($"startup failed: {message}");
-            Console.Error.WriteLine(message);
-            return code;
+            acquired = parts.AcquireSingleInstance();
         }
-
-        using var instance = parts.AcquireSingleInstance();
+        catch (Exception ex)
+        {
+            try { Directory.CreateDirectory(data); } catch (Exception) { }
+            log = OpenLog();
+            return Fail(1, ex.Message.ReplaceLineEndings(" "));
+        }
+        using var instance = acquired;
         if (instance is null)
         {
             // Best effort: the log may not exist or be writable; RequestLog swallows failures.
             try { Directory.CreateDirectory(data); } catch (Exception) { }
-            log = new RequestLog(Path.Combine(data, "setu.log"));
+            log = OpenLog();
             return Fail(2, "setu is already running for this user.");
         }
 
@@ -54,7 +98,7 @@ public static class SetuStartup
         try
         {
             Directory.CreateDirectory(data);
-            log = new RequestLog(Path.Combine(data, "setu.log"));
+            log = OpenLog();
             var options = ServerOptions.Load(data);
             port = options.Port;
             var token = new TokenStore(data, parts.TokenProtector).GetOrCreate();

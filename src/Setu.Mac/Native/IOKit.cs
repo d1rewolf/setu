@@ -20,4 +20,14 @@ internal static partial class IOKit
 
     [LibraryImport(Lib)]
     internal static partial int IOObjectRelease(uint obj);
+
+    /// <summary>kIOPMAssertionLevelOn.</summary>
+    internal const uint kIOPMAssertionLevelOn = 255;
+
+    /// <summary>
+    /// IOPMAssertionCreateWithName(CFStringRef type, IOPMAssertionLevel, CFStringRef name, IOPMAssertionID *):
+    /// returns an IOReturn, 0 on success. The assertion holds until released or the process ends.
+    /// </summary>
+    [LibraryImport(Lib)]
+    internal static partial int IOPMAssertionCreateWithName(nint assertionType, uint level, nint assertionName, out uint assertionId);
 }

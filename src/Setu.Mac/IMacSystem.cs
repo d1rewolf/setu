@@ -55,5 +55,9 @@ internal sealed record UnicodeEvent(string Text, bool Down) : MacEvent;
 /// <summary>Runs a program to completion.</summary>
 internal interface ICommandRunner
 {
+    /// <summary>Discards stdout.</summary>
     (int Exit, string Stderr) Run(string file, IReadOnlyList<string> args, TimeSpan timeout);
+
+    /// <summary>Also returns stdout.</summary>
+    (int Exit, string Stdout, string Stderr) RunCapture(string file, IReadOnlyList<string> args, TimeSpan timeout);
 }

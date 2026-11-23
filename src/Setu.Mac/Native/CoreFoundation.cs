@@ -44,6 +44,11 @@ internal static unsafe partial class CoreFoundation
     [LibraryImport(Lib)]
     internal static partial nint CFDictionaryGetValue(nint dict, nint key);
 
+    /// <summary>Create: release the result. The callbacks are the addresses of kCFTypeDictionary*CallBacks.</summary>
+    [LibraryImport(Lib)]
+    internal static partial nint CFDictionaryCreate(
+        nint allocator, nint* keys, nint* values, nint count, nint keyCallBacks, nint valueCallBacks);
+
     [LibraryImport(Lib)]
     [return: MarshalAs(UnmanagedType.U1)]
     internal static partial bool CFNumberGetValue(nint number, nint type, long* value);
@@ -72,5 +77,9 @@ internal static unsafe partial class CoreFoundation
     /// that holds the reference, so it is read once more. Never released.
     /// </summary>
     internal static nint Constant(string name) =>
-        *(nint*)NativeLibrary.GetExport(NativeLibrary.Load(Lib), name);
+        *(nint*)ExportAddress(name);
+
+    /// <summary>The address of an exported CF variable, such as the kCFTypeDictionaryKeyCallBacks struct.</summary>
+    internal static nint ExportAddress(string name) =>
+        NativeLibrary.GetExport(NativeLibrary.Load(Lib), name);
 }

@@ -89,4 +89,52 @@ public sealed class SetuStartupTests : IDisposable
         Assert.Equal(0, await Task.Run(() => SetuStartup.Run(parts, cts.Token), TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
         Assert.Contains("after-start failed, continuing: boom", Log);
     }
+    [Fact]
+    public void Run_AcquireThrows_Returns1_AndLogs()
+    {
+        var code = SetuStartup.Run(Parts(acquire: () => throw new UnauthorizedAccessException("lock denied")), TestContext.Current.CancellationToken);
+        Assert.Equal(1, code);
+        Assert.EndsWith("startup failed: lock denied" + Environment.NewLine, Log);
+    }
+
+    [Fact]
+    public void Run_BuilderThrows_Returns1_AndLogs()
+    {
+        var code = SetuStartup.Run(_data, _ => throw new InvalidOperationException("no desktop\nhere"), TestContext.Current.CancellationToken);
+        Assert.Equal(1, code);
+        Assert.EndsWith("startup failed: no desktop here" + Environment.NewLine, Log);
+    }
+
+    [Fact]
+    public void Run_BuilderForAnotherDataDirectory_Returns1()
+    {
+        var other = Path.Combine(_data, "other");
+        Assert.Equal(1, SetuStartup.Run(_data, _ => Parts() with { DataDirectory = other }, TestContext.Current.CancellationToken));
+        Assert.Contains("startup failed:", Log);
+    }
+
+    [Fact]
+    public async Task Run_Builder_SharesOneLogWithTheServer()
+    {
+        File.WriteAllText(Path.Combine(_data, "config.json"), $"{{\"port\":{FreePort()}}}");
+        using var cts = new CancellationTokenSource();
+        RequestLog? given = null, afterStart = null;
+        var run = Task.Run(() => SetuStartup.Run(_data, log =>
+        {
+            given = log;
+            return Parts(after: l => { afterStart = l; cts.Cancel(); });
+        }, cts.Token), TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, await run.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        Assert.NotNull(given);
+        Assert.Same(given, afterStart);
+        Assert.Contains("/mcp", Log);
+    }
+
+    [Fact]
+    public void Run_Builder_SecondInstance_Returns2()
+    {
+        Assert.Equal(2, SetuStartup.Run(_data, _ => Parts(acquire: () => null), TestContext.Current.CancellationToken));
+        Assert.EndsWith("startup failed: setu is already running for this user." + Environment.NewLine, Log);
+    }
 }

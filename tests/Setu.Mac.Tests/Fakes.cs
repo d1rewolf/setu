@@ -68,6 +68,12 @@ internal sealed class FakeRunner : ICommandRunner
         return (0, "");
     }
 
+    public (int Exit, string Stdout, string Stderr) RunCapture(string file, IReadOnlyList<string> args, TimeSpan timeout)
+    {
+        var (exit, stderr) = Run(file, args, timeout);
+        return (exit, "", stderr);
+    }
+
     /// <summary>Just the PNG signature and IHDR chunk, which is all MacDesktop reads.</summary>
     public static byte[] PngBytes(int width, int height)
     {

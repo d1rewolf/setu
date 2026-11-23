@@ -17,6 +17,14 @@ internal static unsafe partial class ApplicationServices
     [return: MarshalAs(UnmanagedType.U1)]
     internal static partial bool AXIsProcessTrusted();
 
+    /// <summary>The value of kAXTrustedCheckOptionPrompt.</summary>
+    internal const string TrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt";
+
+    /// <summary>With {kAXTrustedCheckOptionPrompt: true}, also shows the Accessibility prompt when not trusted.</summary>
+    [LibraryImport(Lib)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static partial bool AXIsProcessTrustedWithOptions(nint options);
+
     /// <summary>Create: release the result.</summary>
     [LibraryImport(Lib)]
     internal static partial nint AXUIElementCreateApplication(int pid);
