@@ -178,7 +178,10 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             var entries = new DirectoryInfo(full)
                 .EnumerateFileSystemInfos("*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = 0 })
                 .Where(e => string.IsNullOrEmpty(pattern) || FileSystemName.MatchesSimpleExpression(pattern, e.Name, true))
-                .Select(e => (Info: e, IsDir: e is DirectoryInfo, Size: e is FileInfo f ? f.Length : 0L, Time: e.LastWriteTime))
+                .Select(e => IsProtectedLink(e)
+                    // Shown by name only: its size and time would stat the protected target.
+                    ? (Info: e, IsDir: false, Size: 0L, Time: DateTime.UnixEpoch.ToLocalTime())
+                    : (Info: e, IsDir: e is DirectoryInfo, Size: e is FileInfo f ? f.Length : 0L, Time: e.LastWriteTime))
                 .ToList();
 
             IOrderedEnumerable<(FileSystemInfo Info, bool IsDir, long Size, DateTime Time)> ordered = key switch
@@ -255,12 +258,26 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
             var options2 = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
             var files = new FileSystemEnumerable<string>(full, static (ref entry) => entry.ToFullPath(), options2)
             {
-                ShouldIncludePredicate = static (ref entry) => !entry.IsDirectory,
+                ShouldIncludePredicate = (ref entry) =>
+                {
+                    // A file symlink into a protected folder must be refused before anything opens (or stats) its
+                    // target, so the reparse-point check comes first.
+                    if ((entry.Attributes & FileAttributes.ReparsePoint) != 0 && !options.Protected.IsEmpty)
+                    {
+                        var link = entry.ToFullPath();
+                        if (options.Protected.Match(link) is not null)
+                        {
+                            if (!skippedProtected.Contains(link)) skippedProtected.Add(link);
+                            return false;
+                        }
+                    }
+                    return !entry.IsDirectory;
+                },
                 ShouldRecursePredicate = (ref entry) =>
                 {
                     var dir = entry.ToFullPath();
                     if (options.Protected.Match(dir) is null) return true;
-                    skippedProtected.Add(dir);
+                    if (!skippedProtected.Contains(dir)) skippedProtected.Add(dir);
                     return false;
                 },
             };
@@ -339,6 +356,9 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
                 throw new ToolInputException($"{path}: permission denied");
             }
         });
+
+    private bool IsProtectedLink(FileSystemInfo e)
+        => !options.Protected.IsEmpty && e.LinkTarget is not null && options.Protected.Match(e.FullName) is not null;
 
     private Encoding LenientEncoding(FileEncodingKind kind)
     {

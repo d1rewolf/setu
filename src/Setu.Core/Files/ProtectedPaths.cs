@@ -30,6 +30,8 @@ public sealed class ProtectedPaths
         })];
     }
 
+    public bool IsEmpty => _roots.Length == 0;
+
     public static string Message(string path)
         => $"{path} is in a folder macOS protects (Desktop, Documents, Downloads, iCloud Drive, other apps' data, removable volumes). Setu has no access to it, on purpose. Work in another folder, or ask John to copy the file out.";
 

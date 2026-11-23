@@ -172,4 +172,24 @@ public sealed class ProtectedPathsTests : IDisposable
             File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
     }
+
+    [Fact]
+    public void FileSymlinkIntoProtected_SearchSkipsIt_ListDirShowsNameOnly()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix symlinks");
+        Directory.CreateDirectory(P("Documents"));
+        File.WriteAllText(P("Documents", "notes.txt"), "needle");
+        File.CreateSymbolicLink(P("notes.txt"), P("Documents", "notes.txt"));
+        var tools = Tools(Roots(P("Documents")));
+
+        var search = tools.Search(_home, content_regex: "needle");
+        Assert.DoesNotContain(":1:", search);
+        var last = search.TrimEnd('\n').Split('\n')[^1];
+        Assert.StartsWith("skipped protected folders: ", last);
+        Assert.Contains(P("notes.txt"), last);
+
+        var list = tools.ListDir(_home);
+        Assert.Contains("f\t0\t", list);
+        Assert.Contains("\tnotes.txt\n", list);
+    }
 }
