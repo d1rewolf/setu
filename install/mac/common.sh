@@ -68,7 +68,7 @@ ensure_signing_identity() {
   unlock_signing
   [[ -n $(signing_sha1) ]] || create_signing_certificate
   local sha1
-  sha1=$(signing_sha1)
+  sha1=$(signing_sha1 || true)
   [[ -n $sha1 ]] || fail "no '$CERT_CN' certificate in $KEYCHAIN."
   if [[ ! -f $LEAF_FILE ]]; then
     (umask 077; print -r -- "$sha1" > "$LEAF_FILE")
@@ -84,7 +84,7 @@ create_signing_keychain() {
   pw=$(<"$KEYCHAIN_PW_FILE")
   [[ -n $pw ]] || fail "could not make a password for the signing keychain."
   security create-keychain -p "$pw" "$KEYCHAIN" || fail "could not create $KEYCHAIN."
-  security set-keychain-settings "$KEYCHAIN"   # no auto-lock
+  security set-keychain-settings "$KEYCHAIN" || fail "could not turn off auto-lock on $KEYCHAIN."
 }
 
 # The private key exists on disk only inside the temporary folder, which is deleted

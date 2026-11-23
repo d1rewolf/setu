@@ -60,7 +60,9 @@ return await smoke.RunAsync(only);
 
 sealed record ToolReply(bool IsError, string Text, IList<ContentBlock> Blocks);
 
-sealed class Smoke
+enum Platform { Windows, Mac }
+
+sealed partial class Smoke
 {
     private static readonly string[] ExpectedTools =
     [
@@ -78,7 +80,15 @@ sealed class Smoke
     private int? _holderPid;
 
     private readonly List<(string Name, Func<Task> Run)> _checks;
-    public IReadOnlyList<string> Names => _checks.Select(c => c.Name).ToList();
+    private readonly List<(string Name, Func<Task> Run)> _macChecks;
+    private Platform _platform = Platform.Windows;
+
+    /// <summary>Every check name of both sets, for validating --only before the platform is known.</summary>
+    public IReadOnlyList<string> Names => _checks.Concat(_macChecks).Select(c => c.Name).Distinct().ToList();
+
+    /// <summary>Decided from the server's tool list: only the Mac build has a "shell" tool.</summary>
+    internal static Platform PlatformFrom(IEnumerable<string> toolNames)
+        => toolNames.Contains("shell") ? Platform.Mac : Platform.Windows;
 
     public Smoke(Uri url, string token)
     {
@@ -102,6 +112,7 @@ sealed class Smoke
             ("screenshot_png_nonempty", ScreenshotPngNonempty),
             ("click_type_into_notepad", ClickTypeIntoNotepad),
         ];
+        _macChecks = MacChecks();
     }
 
     public async Task<int> RunAsync(string? only)
@@ -129,7 +140,27 @@ sealed class Smoke
 
         try
         {
-            foreach (var (name, run) in _checks)
+            var tools = await _client.ListToolsAsync();
+            _platform = PlatformFrom(tools.Select(t => t.Name));
+            Console.WriteLine($"platform: {_platform}");
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"FAIL list_tools: {Describe(e)}");
+            await _client.DisposeAsync();
+            return 1;
+        }
+        var checks = _platform == Platform.Mac ? _macChecks : _checks;
+        if (only is not null && !checks.Any(c => c.Name == only))
+        {
+            Console.Error.WriteLine($"No {_platform} check named '{only}'. Checks: {string.Join(", ", checks.Select(c => c.Name))}");
+            await _client.DisposeAsync();
+            return 2;
+        }
+
+        try
+        {
+            foreach (var (name, run) in checks)
             {
                 if (only is not null && name != only) continue;
                 try
@@ -225,6 +256,8 @@ sealed class Smoke
         var trunc = head + "--- stdout ---\nxx\n" + TruncatedMarker + "--- stderr ---\n";
         Eq("xx\n", Section(trunc, "stdout"), "truncated stdout");
         Eq("", Section(head + "--- stdout ---\n--- stderr ---\n", "stdout"), "both empty");
+        Eq("Mac", PlatformFrom(["read_file", "shell", "start_process"]).ToString(), "platform with shell");
+        Eq("Windows", PlatformFrom(["read_file", "powershell", "cmd"]).ToString(), "platform with powershell");
     }
 
     private static string PsQuote(string s) => "'" + s.Replace("'", "''") + "'";
@@ -263,6 +296,7 @@ sealed class Smoke
 
     private async Task CleanupAsync()
     {
+        if (_platform == Platform.Mac) { await MacCleanupAsync(); return; }
         try
         {
             var kill = new StringBuilder();
@@ -311,8 +345,9 @@ sealed class Smoke
     {
         var tools = await _client!.ListToolsAsync();
         var names = tools.Select(t => t.Name).ToHashSet();
-        var missing = ExpectedTools.Where(n => !names.Contains(n)).ToList();
-        var extra = names.Where(n => !ExpectedTools.Contains(n)).ToList();
+        var expected = _platform == Platform.Mac ? MacExpectedTools : ExpectedTools;
+        var missing = expected.Where(n => !names.Contains(n)).ToList();
+        var extra = names.Where(n => !expected.Contains(n)).ToList();
         Require(missing.Count == 0, $"missing tools: {string.Join(", ", missing)}");
         Require(extra.Count == 0, $"unexpected tools: {string.Join(", ", extra)}");
     }
