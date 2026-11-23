@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Setu.Core;
 using Setu.Core.Files;
+using Setu.Core.Screen;
 using Setu.Core.Server;
 using Setu.Win32;
 
@@ -72,7 +73,7 @@ try
 
     var app = ServerHost.Build(new ServerHostSettings(
         IPAddress.Loopback, port, token, log, new FileToolsOptions(AnsiCodePage.Current),
-        () => new JobObjectContainment(), new DetachedLauncher(log), new Win32Desktop()));
+        () => new JobObjectContainment(), new DetachedLauncher(log), new Win32Desktop(), KeyVocabulary.Windows));
     var started = log;
     app.Lifetime.ApplicationStarted.Register(() => started.Write($"listening on http://127.0.0.1:{port}/mcp"));
     app.Run();

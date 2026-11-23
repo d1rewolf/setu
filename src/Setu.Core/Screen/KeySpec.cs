@@ -1,34 +1,62 @@
 namespace Setu.Core.Screen;
 
-public static class KeySpec
+/// <summary>The modifiers and keys one platform's send_keys accepts.</summary>
+/// <param name="Modifiers">Alias to canonical modifier name.</param>
+/// <param name="Rejected">Name (modifier or key) to the hint shown when an agent uses it.</param>
+public sealed record KeyVocabulary(
+    string Name,
+    IReadOnlyDictionary<string, string> Modifiers,
+    IReadOnlySet<string> Keys,
+    IReadOnlyDictionary<string, string> Rejected)
 {
-    private static readonly string[] ModifierNames = ["ctrl", "alt", "shift", "win"];
-
     private static readonly string[] NamedKeys =
     [
         "enter", "tab", "esc", "backspace", "delete", "insert", "space",
         "up", "down", "left", "right", "home", "end", "pageup", "pagedown", "printscreen",
     ];
 
-    private static readonly HashSet<string> Modifiers = new(ModifierNames);
-    private static readonly HashSet<string> Keys = BuildKeys();
+    private static readonly string[] NotOnMac = ["insert", "printscreen"];
 
-    private static HashSet<string> BuildKeys()
+    public static KeyVocabulary Windows { get; } = new(
+        "Windows",
+        new Dictionary<string, string> { ["ctrl"] = "ctrl", ["alt"] = "alt", ["shift"] = "shift", ["win"] = "win" },
+        BuildKeys(NamedKeys),
+        new Dictionary<string, string>());
+
+    public static KeyVocabulary Mac { get; } = new(
+        "macOS",
+        new Dictionary<string, string>
+        {
+            ["cmd"] = "cmd", ["command"] = "cmd", ["ctrl"] = "ctrl",
+            ["option"] = "option", ["alt"] = "option", ["shift"] = "shift",
+        },
+        BuildKeys(NamedKeys.Except(NotOnMac)),
+        new Dictionary<string, string>
+        {
+            ["win"] = "use cmd on macOS",
+            ["insert"] = "not on a Mac keyboard",
+            ["printscreen"] = "not on a Mac keyboard",
+        });
+
+    private static HashSet<string> BuildKeys(IEnumerable<string> named)
     {
-        var set = new HashSet<string>(NamedKeys);
+        var set = new HashSet<string>(named);
         for (var c = 'a'; c <= 'z'; c++) set.Add(c.ToString());
         for (var c = '0'; c <= '9'; c++) set.Add(c.ToString());
         for (var i = 1; i <= 24; i++) set.Add($"f{i}");
         return set;
     }
 
-    private static string KnownList() =>
-        $"modifiers: {string.Join(" ", ModifierNames)}; keys: a-z 0-9 f1-f24 {string.Join(" ", NamedKeys)}";
+    internal string KnownList() =>
+        $"modifiers: {string.Join(" ", Modifiers.Values.Distinct())}; keys: a-z 0-9 f1-f24 {string.Join(" ", NamedKeys.Where(Keys.Contains))}";
+}
 
-    public static IReadOnlyList<KeyChord> Parse(string keys)
+public static class KeySpec
+{
+    public static IReadOnlyList<KeyChord> Parse(string keys, KeyVocabulary vocabulary)
     {
         var tokens = (keys ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length == 0) throw new ToolInputException($"keys is empty; known keys: {KnownList()}");
+        if (tokens.Length == 0) throw new ToolInputException($"keys is empty; known keys: {vocabulary.KnownList()}");
 
         var chords = new List<KeyChord>();
         foreach (var token in tokens)
@@ -37,16 +65,19 @@ public static class KeySpec
             var mods = new List<string>();
             for (var i = 0; i < parts.Length - 1; i++)
             {
-                if (!Modifiers.Contains(parts[i])) throw Unknown(parts[i]);
-                mods.Add(parts[i]);
+                if (!vocabulary.Modifiers.TryGetValue(parts[i], out var canonical)) throw Unknown(vocabulary, parts[i]);
+                mods.Add(canonical);
             }
             var key = parts[^1];
-            if (!Keys.Contains(key)) throw Unknown(key);
+            if (!vocabulary.Keys.Contains(key)) throw Unknown(vocabulary, key);
             chords.Add(new KeyChord(mods, key));
         }
         return chords;
     }
 
-    private static ToolInputException Unknown(string k) =>
-        new($"Unknown key '{k}'; known keys: {KnownList()}");
+    private static ToolInputException Unknown(KeyVocabulary vocabulary, string k)
+    {
+        var hint = vocabulary.Rejected.TryGetValue(k, out var h) ? $" ({h})" : "";
+        return new($"Unknown key '{k}'{hint}; known keys: {vocabulary.KnownList()}");
+    }
 }

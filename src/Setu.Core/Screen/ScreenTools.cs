@@ -8,7 +8,7 @@ using ModelContextProtocol.Server;
 namespace Setu.Core.Screen;
 
 [McpServerToolType]
-public sealed class ScreenTools(RequestLog log, IDesktop desktop)
+public sealed class ScreenTools(RequestLog log, IDesktop desktop, KeyVocabulary vocabulary)
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -82,13 +82,13 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop)
         });
 
     [McpServerTool(Name = "send_keys")]
-    [Description("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers: ctrl alt shift win. Keys: a-z, 0-9, f1-f24, enter tab esc backspace delete insert space up down left right home end pageup pagedown printscreen. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".")]
+    [Description("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f24, enter tab esc backspace delete insert space up down left right home end pageup pagedown printscreen. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".")]
     public string SendKeys(
         [Description("Space-separated chords, e.g. \"ctrl+shift+s enter\".")] string keys)
         => ToolGuard.Run(log, "send_keys", () =>
         {
             var note = Note(Gate(ScreenUse.Keyboard));
-            desktop.SendKeys(KeySpec.Parse(keys));
+            desktop.SendKeys(KeySpec.Parse(keys, vocabulary));
             return "Sent" + note;
         });
 

@@ -9,7 +9,7 @@ public sealed class ScreenToolsTests
     private static (ScreenTools Tools, FakeDesktop Desktop) Make()
     {
         var d = new FakeDesktop();
-        return (new ScreenTools(RequestLog.Null, d), d);
+        return (new ScreenTools(RequestLog.Null, d, KeyVocabulary.Windows), d);
     }
 
     public static TheoryData<ScreenUse, string> ToolsByUse() => new()

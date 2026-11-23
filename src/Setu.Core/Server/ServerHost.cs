@@ -20,7 +20,8 @@ public sealed record ServerHostSettings(
     FileToolsOptions FileOptions,
     Func<IProcessContainment> Containment,
     IDetachedLauncher Launcher,
-    IDesktop Desktop);
+    IDesktop Desktop,
+    KeyVocabulary Keys);
 
 public static class ServerHost
 {
@@ -43,6 +44,7 @@ public static class ServerHost
         builder.Services.AddSingleton(settings.Log);
         builder.Services.AddSingleton(settings.FileOptions);
         builder.Services.AddSingleton(settings.Desktop);
+        builder.Services.AddSingleton(settings.Keys);
         builder.Services.AddSingleton(settings.Launcher);
         builder.Services.AddSingleton<IProcessRunner>(new ProcessRunner(settings.Containment));
         builder.Services.AddHostedService<LoopbackGuardService>();
