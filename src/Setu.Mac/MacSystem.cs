@@ -157,21 +157,30 @@ internal sealed unsafe class MacSystem : IMacSystem
         return length > 0 ? Encoding.UTF8.GetString(buffer, Math.Min(length, size)) : null;
     }
 
+    /// <summary>
+    /// Creates every event before posting any, so a refused event fails the call before anything is pressed
+    /// (otherwise a key could be left held down with its up event never posted). All created events are released.
+    /// </summary>
     public void Post(IReadOnlyList<MacEvent> events)
     {
-        for (var i = 0; i < events.Count; i++)
+        var created = new nint[events.Count];
+        try
         {
-            if (i > 0) Thread.Sleep(EventGap);
-            var ev = Create(events[i]);
-            if (ev == 0) throw new McpException($"macOS could not create the input event ({events[i].GetType().Name})");
-            try
+            for (var i = 0; i < events.Count; i++)
             {
-                CGEventPost(kCGHIDEventTap, ev);
+                created[i] = Create(events[i]);
+                if (created[i] == 0) throw new McpException($"macOS could not create the input event ({events[i].GetType().Name})");
             }
-            finally
+            for (var i = 0; i < created.Length; i++)
             {
-                CFRelease(ev);
+                if (i > 0) Thread.Sleep(EventGap);
+                CGEventPost(kCGHIDEventTap, created[i]);
             }
+        }
+        finally
+        {
+            foreach (var ev in created)
+                if (ev != 0) CFRelease(ev);
         }
     }
 

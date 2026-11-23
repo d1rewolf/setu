@@ -26,6 +26,9 @@ public sealed partial class MacDetachedLauncher : IDetachedLauncher
 
     private readonly RequestLog log;
     private readonly ProtectedPaths protectedPaths;
+
+    /// <summary>The protected folders this launcher refuses; on the Mac the file tools share the instance.</summary>
+    internal ProtectedPaths Protected => protectedPaths;
     private readonly ICommandRunner run;
     private readonly Func<string, string?> findOnPath;
     private readonly TimeSpan pidWait;

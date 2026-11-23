@@ -30,7 +30,8 @@ public sealed class MacPlatformTests : IDisposable
         Assert.Equal(_data, parts.DataDirectory);
         Assert.IsType<UnixTokenFileProtector>(parts.TokenProtector);
         Assert.IsType<ProcessGroupContainment>(parts.Containment());
-        Assert.IsType<MacDetachedLauncher>(parts.Launcher);
+        // One protected-folder list for the launcher and the file tools, so they cannot disagree.
+        Assert.Same(parts.FileOptions.Protected, Assert.IsType<MacDetachedLauncher>(parts.Launcher).Protected);
         Assert.IsType<MacDesktop>(parts.Desktop);
         Assert.Equal(28591, parts.FileOptions.FallbackCodePage);
         Assert.Equal(LineEndings.Lf, parts.FileOptions.NewFileLineEndings);

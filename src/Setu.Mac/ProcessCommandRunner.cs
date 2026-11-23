@@ -5,6 +5,8 @@ namespace Setu.Mac;
 /// <summary>Runs a program with stdin closed and stdout and stderr collected; kills it on timeout.</summary>
 internal sealed class ProcessCommandRunner : ICommandRunner
 {
+    private static readonly TimeSpan PostKillWait = TimeSpan.FromSeconds(5);
+
     public (int Exit, string Stderr) Run(string file, IReadOnlyList<string> args, TimeSpan timeout)
     {
         var (exit, _, stderr) = RunCapture(file, args, timeout);
@@ -29,8 +31,10 @@ internal sealed class ProcessCommandRunner : ICommandRunner
         var stderr = process.StandardError.ReadToEndAsync();
         if (!process.WaitForExit(timeout))
         {
-            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-            process.WaitForExit();
+            try { process.Kill(entireProcessTree: true); }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            // Bounded: a process stuck in the kernel may not die at once, and the caller must not hang on it.
+            process.WaitForExit(PostKillWait);
             return (-1, "", $"{Path.GetFileName(file)} did not finish within {timeout.TotalSeconds:0} s");
         }
         process.WaitForExit(); // let the async readers reach end of stream
