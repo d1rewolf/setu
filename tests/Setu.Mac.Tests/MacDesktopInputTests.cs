@@ -68,6 +68,45 @@ public class MacDesktopInputTests
     }
 
     [Fact]
+    public void TypeText_LineBreaks_PressReturn_CrLfOnce()
+    {
+        var sys = new FakeMacSystem();
+        Desktop(sys).TypeText("a\r\nb\n");
+        Assert.Equal<MacEvent>(
+            [
+                new UnicodeEvent("a", Down: true),
+                new UnicodeEvent("a", Down: false),
+                new KeyEvent(0x24, Down: true, 0),
+                new KeyEvent(0x24, Down: false, 0),
+                new UnicodeEvent("b", Down: true),
+                new UnicodeEvent("b", Down: false),
+                new KeyEvent(0x24, Down: true, 0),
+                new KeyEvent(0x24, Down: false, 0),
+            ],
+            sys.Posted);
+    }
+
+    [Fact]
+    public void TypeText_LoneCrAndLfAndLfCr_EachPressReturn()
+    {
+        // As on Windows: CRLF is one break; a lone CR, a lone LF, and LF followed by CR are one each.
+        var sys = new FakeMacSystem();
+        Desktop(sys).TypeText("\rx\n\r");
+        Assert.Equal<MacEvent>(
+            [
+                new KeyEvent(0x24, Down: true, 0),
+                new KeyEvent(0x24, Down: false, 0),
+                new UnicodeEvent("x", Down: true),
+                new UnicodeEvent("x", Down: false),
+                new KeyEvent(0x24, Down: true, 0),
+                new KeyEvent(0x24, Down: false, 0),
+                new KeyEvent(0x24, Down: true, 0),
+                new KeyEvent(0x24, Down: false, 0),
+            ],
+            sys.Posted);
+    }
+
+    [Fact]
     public void TypeText_Empty_PostsNothing()
     {
         var sys = new FakeMacSystem();
