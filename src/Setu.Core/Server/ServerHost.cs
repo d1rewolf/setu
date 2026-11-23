@@ -12,7 +12,10 @@ using Setu.Core.Shell;
 
 namespace Setu.Core.Server;
 
-/// <summary>Which shell tools the host offers: powershell and cmd, or the zsh <c>shell</c> tool.</summary>
+/// <summary>
+/// Which shell tools the host offers (powershell and cmd, or the zsh <c>shell</c> tool), and with them the
+/// platform's wording of start_process and send_keys.
+/// </summary>
 public enum ShellFlavor { Windows, Zsh }
 
 /// <param name="Zsh">Used only when <paramref name="Shell"/> is <see cref="ShellFlavor.Zsh"/>; null means the
@@ -62,17 +65,20 @@ public static class ServerHost
         switch (settings.Shell)
         {
             case ShellFlavor.Windows:
-                mcp.WithTools<WindowsShellTools>();
+                mcp.WithTools<WindowsShellTools>()
+                    .WithTools<WindowsProcessTools>()
+                    .WithTools([ScreenTools.SendKeysTool(ScreenTools.WindowsSendKeysDescription)]);
                 break;
             case ShellFlavor.Zsh:
                 builder.Services.AddSingleton(settings.Zsh ?? new ZshSettings());
-                mcp.WithTools<ZshShellTools>();
+                mcp.WithTools<ZshShellTools>()
+                    .WithTools<MacProcessTools>()
+                    .WithTools([ScreenTools.SendKeysTool(ScreenTools.MacSendKeysDescription)]);
                 break;
             default:
                 throw new ArgumentException($"Unknown shell flavour {settings.Shell}.", nameof(settings));
         }
-        mcp.WithTools<ProcessTools>()
-            .WithTools<ScreenTools>()
+        mcp.WithTools<ScreenTools>()
             .WithRequestFilters(f => f.AddCallToolFilter(next => async (context, ct) =>
             {
                 try

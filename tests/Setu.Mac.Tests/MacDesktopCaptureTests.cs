@@ -58,7 +58,7 @@ public sealed class MacDesktopCaptureTests : IDisposable
     {
         var run = new FakeRunner();
         var ex = Assert.Throws<ToolInputException>(() => Desktop(new FakeMacSystem(), run).Capture(new WindowTarget(7), null));
-        Assert.Equal("No window with handle 7", ex.Message);
+        Assert.Equal("No window with handle 7; get a current handle from list_windows", ex.Message);
         Assert.Empty(run.Calls);
     }
 

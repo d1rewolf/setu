@@ -1,6 +1,7 @@
 namespace Setu.Core.Screen;
 
 /// <summary>The modifiers and keys one platform's send_keys accepts.</summary>
+/// <param name="Name">The platform's name as agents read it, e.g. in focus_window's "macOS refused to bring ...".</param>
 /// <param name="Modifiers">Alias to canonical modifier name.</param>
 /// <param name="Rejected">Name (modifier or key) to the hint shown when an agent uses it.</param>
 public sealed record KeyVocabulary(

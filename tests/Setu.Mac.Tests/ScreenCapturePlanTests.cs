@@ -31,7 +31,7 @@ public class ScreenCapturePlanTests
     {
         var ex = Assert.Throws<ToolInputException>(() =>
             ScreenCapturePlan.Args(new WindowTarget(99), Union, null, "/o"));
-        Assert.Equal("No window with handle 99", ex.Message);
+        Assert.Equal("No window with handle 99; get a current handle from list_windows", ex.Message);
     }
 
     [Fact]

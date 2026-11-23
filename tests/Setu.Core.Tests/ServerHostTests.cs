@@ -266,4 +266,125 @@ public sealed class ServerHostTests : IAsyncLifetime
             await app.DisposeAsync();
         }
     }
+
+    /// <summary>The tool text a host for <paramref name="flavor"/> gives an agent, as listed over MCP.</summary>
+    private static async Task<IList<McpClientTool>> ListTools(ShellFlavor flavor)
+    {
+        var app = ServerHost.Build(new ServerHostSettings(
+            IPAddress.Loopback, 0, Token, RequestLog.Null,
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(),
+            flavor == ShellFlavor.Zsh ? KeyVocabulary.Mac : KeyVocabulary.Windows, flavor, null));
+        try
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            await using var client = await McpClient.CreateAsync(
+                new HttpClientTransport(new HttpClientTransportOptions
+                {
+                    Endpoint = new Uri(app.Urls.Single().TrimEnd('/') + "/mcp"),
+                    AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + Token },
+                }),
+                cancellationToken: TestContext.Current.CancellationToken);
+            return await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            await app.StopAsync(TestContext.Current.CancellationToken);
+            await app.DisposeAsync();
+        }
+    }
+
+    private static string ParamDescription(McpClientTool tool, string parameter) =>
+        tool.JsonSchema.GetProperty("properties").GetProperty(parameter).GetProperty("description").GetString()!;
+
+    private const string WindowsCwd = "Optional absolute working directory. %VARS% are expanded.";
+
+    /// <summary>
+    /// The Windows text, pinned word for word. powershell, cmd and start_process's parameters are as on main;
+    /// start_process says "a shell command's own background launch" (the plan's neutral wording) and send_keys
+    /// names the Mac modifiers too (also the plan's).
+    /// </summary>
+    [Fact]
+    public async Task WindowsHost_ToolText_Pinned()
+    {
+        var tools = await ListTools(ShellFlavor.Windows);
+        McpClientTool Tool(string name) => tools.Single(t => t.Name == name);
+
+        var start = Tool("start_process");
+        Assert.Equal("Starts a program in the user's desktop session and returns its PID without waiting for it. Use this, not a shell command's own background launch, for GUI apps or anything you want to keep running after the call returns.", start.Description);
+        Assert.Equal("Program path or name on PATH, e.g. notepad.exe.", ParamDescription(start, "path"));
+        Assert.Equal("Optional command-line arguments as one string.", ParamDescription(start, "arguments"));
+        Assert.Equal(WindowsCwd, ParamDescription(start, "cwd"));
+
+        var keys = Tool("send_keys");
+        Assert.Equal("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f24, enter tab esc backspace delete insert space up down left right home end pageup pagedown printscreen. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".", keys.Description);
+        Assert.Equal("Space-separated chords, e.g. \"ctrl+shift+s enter\".", ParamDescription(keys, "keys"));
+
+        var ps = Tool("powershell");
+        Assert.Equal("Runs a Windows PowerShell command and waits for it to finish. Non-interactive: anything that waits for input fails instead of waiting. On timeout the command and everything it started is killed and the partial output is returned. Output is capped at 64 KiB per stream. Programs this command starts may be stopped when the server restarts; use start_process for apps that must keep running.", ps.Description);
+        Assert.Equal("PowerShell script text.", ParamDescription(ps, "command"));
+        Assert.Equal(WindowsCwd, ParamDescription(ps, "cwd"));
+        Assert.Equal("Timeout in seconds, 1 to 600.", ParamDescription(ps, "timeout_s"));
+
+        var cmd = Tool("cmd");
+        Assert.Equal("Runs a cmd.exe command line and waits for it to finish. Non-interactive: anything that waits for input fails instead of waiting. On timeout the command and everything it started is killed and the partial output is returned. Output is capped at 64 KiB per stream. Programs this command starts may be stopped when the server restarts; use start_process for apps that must keep running.", cmd.Description);
+        Assert.Equal("cmd.exe command line.", ParamDescription(cmd, "command"));
+        Assert.Equal(WindowsCwd, ParamDescription(cmd, "cwd"));
+        Assert.Equal("Timeout in seconds, 1 to 600.", ParamDescription(cmd, "timeout_s"));
+    }
+
+    [Fact]
+    public async Task MacHost_ToolText_IsTheMacs()
+    {
+        var tools = await ListTools(ShellFlavor.Zsh);
+        McpClientTool Tool(string name) => tools.Single(t => t.Name == name);
+
+        var start = Tool("start_process");
+        Assert.Equal("Starts a program in the user's desktop session and returns its PID without waiting for it. Use this, not a shell command's own background launch, for GUI apps or anything you want to keep running after the call returns. A path ending in .app, or an app name that is not a program on PATH (e.g. TextEdit), starts through LaunchServices; if that app is already running it is brought to the front and its existing PID is returned.", start.Description);
+        Assert.Equal("Program path or name on PATH, or an app name or .app path, e.g. TextEdit.", ParamDescription(start, "path"));
+        Assert.Equal("Optional command-line arguments as one string, split into arguments like a POSIX shell does (single quotes, double quotes and backslash), with no variable, ~ or wildcard expansion. For an app, absolute paths of existing files are opened as documents and the rest are passed to the app.", ParamDescription(start, "arguments"));
+        Assert.Equal("Optional absolute working directory; a leading ~ is your home folder. Ignored when starting an app.", ParamDescription(start, "cwd"));
+
+        var keys = Tool("send_keys");
+        Assert.Equal("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f20, enter tab esc backspace delete space up down left right home end pageup pagedown. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".", keys.Description);
+        Assert.Equal("Space-separated chords, e.g. \"ctrl+shift+s enter\".", ParamDescription(keys, "keys"));
+
+        // The file tools' neutral path wording names both platforms on purpose; these three are the Mac's own.
+        var own = string.Join("\n", new[] { start, keys, Tool("shell") }.Select(t => t.Description + t.JsonSchema.GetRawText()));
+        foreach (var windowsOnly in new[] { "notepad", "%VARS%", "On Windows", "insert", "printscreen", "f24", "PowerShell", "cmd.exe" })
+            Assert.DoesNotContain(windowsOnly, own);
+    }
+
+    /// <summary>send_keys registered by hand still runs, with a ScreenTools from the request's services.</summary>
+    [Theory]
+    [InlineData(ShellFlavor.Windows)]
+    [InlineData(ShellFlavor.Zsh)]
+    public async Task SendKeys_Call_Works(ShellFlavor flavor)
+    {
+        var desktop = new FakeDesktop();
+        var app = ServerHost.Build(new ServerHostSettings(
+            IPAddress.Loopback, 0, Token, RequestLog.Null,
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), desktop,
+            flavor == ShellFlavor.Zsh ? KeyVocabulary.Mac : KeyVocabulary.Windows, flavor, null));
+        try
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            await using var client = await McpClient.CreateAsync(
+                new HttpClientTransport(new HttpClientTransportOptions
+                {
+                    Endpoint = new Uri(app.Urls.Single().TrimEnd('/') + "/mcp"),
+                    AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + Token },
+                }),
+                cancellationToken: TestContext.Current.CancellationToken);
+            var result = await client.CallToolAsync("send_keys", new Dictionary<string, object?> { ["keys"] = "ctrl+s" },
+                cancellationToken: TestContext.Current.CancellationToken);
+            Assert.NotEqual(true, result.IsError);
+            Assert.Equal("Sent", Assert.IsType<TextContentBlock>(result.Content.Single()).Text);
+            Assert.NotNull(desktop.LastChords);
+        }
+        finally
+        {
+            await app.StopAsync(TestContext.Current.CancellationToken);
+            await app.DisposeAsync();
+        }
+    }
 }

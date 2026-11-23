@@ -220,4 +220,13 @@ public sealed class ScreenToolsTests
         var ex = Assert.Throws<McpException>(() => t.FocusWindow(77));
         Assert.Equal("Windows refused to bring 77 to the foreground", ex.Message);
     }
+
+    [Fact]
+    public void FocusWindow_RefusedOnMac_SaysMacOS()
+    {
+        var d = new FakeDesktop { FocusResult = false };
+        var t = new ScreenTools(RequestLog.Null, d, KeyVocabulary.Mac);
+        var ex = Assert.Throws<McpException>(() => t.FocusWindow(77));
+        Assert.Equal("macOS refused to bring 77 to the foreground", ex.Message);
+    }
 }

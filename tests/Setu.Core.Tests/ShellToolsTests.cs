@@ -46,7 +46,7 @@ public sealed class ShellToolsTests
     private static ZshShellTools Zsh(IProcessRunner runner, FileToolsOptions? options = null) =>
         new(RequestLog.Null, runner, options ?? NoProtection, TestZsh);
 
-    private static ProcessTools Processes(IDetachedLauncher launcher, FileToolsOptions? options = null) =>
+    private static WindowsProcessTools Processes(IDetachedLauncher launcher, FileToolsOptions? options = null) =>
         new(RequestLog.Null, launcher, options ?? NoProtection);
 
     private static ZshShellTools RealZsh() =>

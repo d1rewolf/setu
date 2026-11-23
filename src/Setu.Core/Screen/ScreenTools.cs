@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -81,8 +82,23 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop, KeyVocabulary 
             return "Typed" + note;
         });
 
-    [McpServerTool(Name = "send_keys")]
-    [Description("Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f24, enter tab esc backspace delete insert space up down left right home end pageup pagedown printscreen. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".")]
+    internal const string WindowsSendKeysDescription =
+        "Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f24, enter tab esc backspace delete insert space up down left right home end pageup pagedown printscreen. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".";
+
+    internal const string MacSendKeysDescription =
+        "Presses key chords in the focused window. Chords are separated by spaces; the parts of one chord are joined with +, case-insensitive. Modifiers on Windows: ctrl alt shift win. On macOS: cmd ctrl option shift (alt = option). Keys: a-z, 0-9, f1-f20, enter tab esc backspace delete space up down left right home end pageup pagedown. Examples: \"ctrl+s\", \"alt+f4\", \"ctrl+a delete\".";
+
+    /// <summary>
+    /// The send_keys tool with the platform's description (the keys differ). SendKeys has no [McpServerTool]
+    /// attribute, so registering ScreenTools does not add it; the server registers this instead. Like the
+    /// attribute-registered tools, each call gets a ScreenTools from the request's services.
+    /// </summary>
+    internal static McpServerTool SendKeysTool(string description) =>
+        McpServerTool.Create(
+            typeof(ScreenTools).GetMethod(nameof(SendKeys))!,
+            static ctx => ActivatorUtilities.CreateInstance<ScreenTools>(ctx.Services!),
+            new McpServerToolCreateOptions { Name = "send_keys", Description = description });
+
     public string SendKeys(
         [Description("Space-separated chords, e.g. \"ctrl+shift+s enter\".")] string keys)
         => ToolGuard.Run(log, "send_keys", () =>
@@ -113,7 +129,7 @@ public sealed class ScreenTools(RequestLog log, IDesktop desktop, KeyVocabulary 
         {
             var note = Note(Gate(ScreenUse.Pointer));
             if (!desktop.FocusWindow(handle))
-                throw new McpException($"Windows refused to bring {handle} to the foreground");
+                throw new McpException($"{vocabulary.Name} refused to bring {handle} to the foreground");
             return "Focused" + note;
         });
 

@@ -19,7 +19,7 @@ internal static class ScreenCapturePlan
             ScreenTarget => ["-x", "-t", "png", "-R", Rect(screenUnion.X, screenUnion.Y, screenUnion.W, screenUnion.H), outFile],
             WindowTarget w => window is not null
                 ? ["-x", "-t", "png", "-o", "-l", window.Id.ToString(CultureInfo.InvariantCulture), outFile]
-                : throw new ToolInputException($"No window with handle {w.Handle}"),
+                : throw new ToolInputException($"No window with handle {w.Handle}; get a current handle from list_windows"),
             RegionTarget r => ["-x", "-t", "png", "-R", Rect(r.X, r.Y, r.Width, r.Height), outFile],
             _ => throw new ToolInputException($"Unsupported capture target {t.GetType().Name}"),
         };
