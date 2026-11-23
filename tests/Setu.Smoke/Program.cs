@@ -126,11 +126,12 @@ sealed partial class Smoke
         }
         try
         {
+            // The default 100 s HttpClient timeout is shorter than a whole-home search on the Mac.
             _client = await McpClient.CreateAsync(new HttpClientTransport(new HttpClientTransportOptions
             {
                 Endpoint = _url,
                 AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + _token },
-            }));
+            }, new HttpClient { Timeout = TimeSpan.FromMinutes(5) }, ownsHttpClient: true));
         }
         catch (Exception e)
         {
