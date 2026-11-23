@@ -24,4 +24,12 @@ public sealed class CommandLinesTests
     {
         Assert.Equal("/d /s /c \"chcp 65001>nul & dir\"", CommandLines.Cmd("dir"));
     }
+
+    [Fact]
+    public void Zsh_CommandLine_Exact()
+    {
+        Assert.Equal(
+            ["-e", "setpgrp(0,0); exec @ARGV or die $!", "--", "/bin/zsh", "-l", "-c", "echo 'a b'"],
+            CommandLines.Zsh("/bin/zsh", "echo 'a b'"));
+    }
 }

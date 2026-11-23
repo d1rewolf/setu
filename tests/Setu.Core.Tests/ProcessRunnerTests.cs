@@ -39,7 +39,7 @@ public sealed class ProcessRunnerTests : IDisposable
 
     private static Task<ProcessResult> Sh(string script, double timeoutSeconds = 10) =>
         Runner.RunAsync(
-            new ProcessRequest("/bin/sh", $"-c \"{script}\"", null, TimeSpan.FromSeconds(timeoutSeconds)),
+            new ProcessRequest("/bin/sh", ["-c", script], null, TimeSpan.FromSeconds(timeoutSeconds)),
             TestContext.Current.CancellationToken);
 
     private static bool Pgrep(string pattern)
@@ -138,7 +138,7 @@ public sealed class ProcessRunnerTests : IDisposable
         try
         {
             var r = await Runner.RunAsync(
-                new ProcessRequest("/bin/sh", "-c pwd", dir, TimeSpan.FromSeconds(10)),
+                new ProcessRequest("/bin/sh", ["-c", "pwd"], dir, TimeSpan.FromSeconds(10)),
                 TestContext.Current.CancellationToken);
             Assert.Equal(dir + "\n", r.Stdout);
         }
@@ -155,11 +155,43 @@ public sealed class ProcessRunnerTests : IDisposable
         var runner = new ProcessRunner(() => new ThrowingContainment());
         var sw = Stopwatch.StartNew();
         var r = await runner.RunAsync(
-            new ProcessRequest("/bin/sh", $"-c \"echo partial; {ThrowingKillMarker}\"", null, TimeSpan.FromSeconds(1)),
+            new ProcessRequest("/bin/sh", ["-c", $"echo partial; {ThrowingKillMarker}"], null, TimeSpan.FromSeconds(1)),
             TestContext.Current.CancellationToken);
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(4), $"took {sw.Elapsed}");
         Assert.True(r.TimedOut);
         Assert.Null(r.ExitCode);
         Assert.Equal("partial\n", r.Stdout);
+    }
+
+    [Fact]
+    public async Task Run_ArgumentList_EachArgumentPassedWhole()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "uses /bin/sh");
+        var r = await Runner.RunAsync(
+            new ProcessRequest("/bin/sh", ["-c", "printf '%s|' \"$@\"", "sh", "a b", "\"q\"", ""], null, TimeSpan.FromSeconds(10)),
+            TestContext.Current.CancellationToken);
+        Assert.Equal("a b|\"q\"||", r.Stdout);
+    }
+
+    [Fact]
+    public async Task Run_Raw_UsesArgumentsStringAsIs()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "uses /bin/sh");
+        var request = ProcessRequest.Raw("/bin/sh", "-c \"echo 'a  b'\"", null, TimeSpan.FromSeconds(10));
+        Assert.Equal("-c \"echo 'a  b'\"", request.RawArguments);
+        Assert.Empty(request.Arguments);
+        var r = await Runner.RunAsync(request, TestContext.Current.CancellationToken);
+        Assert.Equal("a  b\n", r.Stdout);
+    }
+
+    [Fact]
+    public async Task Run_Environment_AddsToInheritedEnvironment()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "uses /bin/sh");
+        var r = await Runner.RunAsync(
+            new ProcessRequest("/bin/sh", ["-c", "echo \"$SETU_TEST_VAR:${PATH:+path}\""], null, TimeSpan.FromSeconds(10),
+                new Dictionary<string, string> { ["SETU_TEST_VAR"] = "héllo" }),
+            TestContext.Current.CancellationToken);
+        Assert.Equal("héllo:path\n", r.Stdout);
     }
 }

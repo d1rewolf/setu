@@ -12,6 +12,11 @@ using Setu.Core.Shell;
 
 namespace Setu.Core.Server;
 
+/// <summary>Which shell tools the host offers: powershell and cmd, or the zsh <c>shell</c> tool.</summary>
+public enum ShellFlavor { Windows, Zsh }
+
+/// <param name="Zsh">Used only when <paramref name="Shell"/> is <see cref="ShellFlavor.Zsh"/>; null means the
+/// default <see cref="ZshSettings"/>.</param>
 public sealed record ServerHostSettings(
     IPAddress Address,
     int Port,
@@ -21,7 +26,9 @@ public sealed record ServerHostSettings(
     Func<IProcessContainment> Containment,
     IDetachedLauncher Launcher,
     IDesktop Desktop,
-    KeyVocabulary Keys);
+    KeyVocabulary Keys,
+    ShellFlavor Shell,
+    ZshSettings? Zsh);
 
 public static class ServerHost
 {
@@ -49,10 +56,22 @@ public static class ServerHost
         builder.Services.AddSingleton<IProcessRunner>(new ProcessRunner(settings.Containment));
         builder.Services.AddHostedService<LoopbackGuardService>();
 
-        builder.Services.AddMcpServer()
+        var mcp = builder.Services.AddMcpServer()
             .WithHttpTransport(o => o.SessionMode = HttpServerSessionMode.Stateless)
-            .WithTools<FileTools>()
-            .WithTools<ShellTools>()
+            .WithTools<FileTools>();
+        switch (settings.Shell)
+        {
+            case ShellFlavor.Windows:
+                mcp.WithTools<WindowsShellTools>();
+                break;
+            case ShellFlavor.Zsh:
+                builder.Services.AddSingleton(settings.Zsh ?? new ZshSettings());
+                mcp.WithTools<ZshShellTools>();
+                break;
+            default:
+                throw new ArgumentException($"Unknown shell flavour {settings.Shell}.", nameof(settings));
+        }
+        mcp.WithTools<ProcessTools>()
             .WithTools<ScreenTools>()
             .WithRequestFilters(f => f.AddCallToolFilter(next => async (context, ct) =>
             {

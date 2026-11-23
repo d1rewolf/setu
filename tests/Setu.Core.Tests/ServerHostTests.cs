@@ -27,7 +27,7 @@ public sealed class ServerHostTests : IAsyncLifetime
         Directory.CreateDirectory(_dir);
         _app = ServerHost.Build(new ServerHostSettings(
             IPAddress.Loopback, 0, Token, new RequestLog(Path.Combine(_dir, "requests.log")),
-            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows));
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows, ShellFlavor.Windows, null));
         await _app.StartAsync(TestContext.Current.CancellationToken);
         _baseUrl = _app.Urls.Single().TrimEnd('/');
     }
@@ -132,7 +132,7 @@ public sealed class ServerHostTests : IAsyncLifetime
         {
             app = ServerHost.Build(new ServerHostSettings(
                 IPAddress.Loopback, 0, Token, RequestLog.Null,
-                new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows));
+                new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows, ShellFlavor.Windows, null));
             await app.StartAsync(TestContext.Current.CancellationToken);
             var url = Assert.Single(app.Urls);
             Assert.StartsWith("http://127.0.0.1:", url);
@@ -153,7 +153,7 @@ public sealed class ServerHostTests : IAsyncLifetime
     {
         Assert.Throws<ArgumentException>(() => ServerHost.Build(new ServerHostSettings(
             IPAddress.Any, 0, Token, RequestLog.Null,
-            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows)));
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(), KeyVocabulary.Windows, ShellFlavor.Windows, null)));
     }
 
     [Theory]
@@ -213,5 +213,57 @@ public sealed class ServerHostTests : IAsyncLifetime
         Assert.True(result.IsError);
         var text = Assert.IsType<TextContentBlock>(result.Content.Single()).Text;
         Assert.StartsWith("Not found:", text);
+    }
+
+    private static readonly string[] WindowsTools =
+    [
+        "read_file", "write_file", "edit_file", "list_dir", "search", "powershell", "cmd", "start_process",
+        "list_windows", "screenshot", "click", "type_text", "send_keys", "scroll", "focus_window",
+    ];
+
+    private static readonly string[] MacTools =
+    [
+        "read_file", "write_file", "edit_file", "list_dir", "search", "shell", "start_process",
+        "list_windows", "screenshot", "click", "type_text", "send_keys", "scroll", "focus_window",
+    ];
+
+    [Theory]
+    [InlineData(ShellFlavor.Windows)]
+    [InlineData(ShellFlavor.Zsh)]
+    public async Task ServerHost_ToolLists(ShellFlavor flavor)
+    {
+        var app = ServerHost.Build(new ServerHostSettings(
+            IPAddress.Loopback, 0, Token, RequestLog.Null,
+            new FileToolsOptions(1252, LineEndings.Crlf, ProtectedPaths.None), () => new DefaultContainment(), new FakeLauncher(), new FakeDesktop(),
+            flavor == ShellFlavor.Zsh ? KeyVocabulary.Mac : KeyVocabulary.Windows, flavor, null));
+        try
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+            await using var client = await McpClient.CreateAsync(
+                new HttpClientTransport(new HttpClientTransportOptions
+                {
+                    Endpoint = new Uri(app.Urls.Single().TrimEnd('/') + "/mcp"),
+                    AdditionalHeaders = new Dictionary<string, string> { ["Authorization"] = "Bearer " + Token },
+                }),
+                cancellationToken: TestContext.Current.CancellationToken);
+            var names = (await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken)).Select(t => t.Name).ToList();
+            var expected = flavor == ShellFlavor.Zsh ? MacTools : WindowsTools;
+            Assert.Equal(expected.Length, names.Count);
+            Assert.True(expected.ToHashSet().SetEquals(names), string.Join(",", names));
+            if (flavor == ShellFlavor.Zsh)
+            {
+                Assert.DoesNotContain("powershell", names);
+                Assert.DoesNotContain("cmd", names);
+                var schema = (await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken))
+                    .Single(t => t.Name == "shell").JsonSchema.GetRawText();
+                Assert.Contains("\"command\"", schema);
+                Assert.DoesNotContain("ancellation", schema);
+            }
+        }
+        finally
+        {
+            await app.StopAsync(TestContext.Current.CancellationToken);
+            await app.DisposeAsync();
+        }
     }
 }

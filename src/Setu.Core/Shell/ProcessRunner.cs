@@ -3,7 +3,30 @@ using System.Text;
 
 namespace Setu.Core.Shell;
 
-public sealed record ProcessRequest(string FileName, string Arguments, string? WorkingDirectory, TimeSpan Timeout);
+/// <summary>
+/// A command to run. <see cref="Arguments"/> go through <see cref="ProcessStartInfo.ArgumentList"/>, one
+/// argument each, unless the request was made with <see cref="Raw"/>. <see cref="Environment"/> entries are
+/// added to (or replace) the inherited environment.
+/// </summary>
+public sealed record ProcessRequest(
+    string FileName,
+    IReadOnlyList<string> Arguments,
+    string? WorkingDirectory,
+    TimeSpan Timeout,
+    IReadOnlyDictionary<string, string>? Environment = null)
+{
+    /// <summary>A command line passed as one string, exactly as given; null for an argument list.</summary>
+    public string? RawArguments { get; private init; }
+
+    /// <summary>
+    /// For programs that parse their own command line (powershell.exe, cmd.exe), whose quoting must stay
+    /// byte-identical: sets <see cref="ProcessStartInfo.Arguments"/> instead of the argument list.
+    /// </summary>
+    public static ProcessRequest Raw(
+        string fileName, string arguments, string? workingDirectory, TimeSpan timeout,
+        IReadOnlyDictionary<string, string>? environment = null)
+        => new(fileName, [], workingDirectory, timeout, environment) { RawArguments = arguments };
+}
 
 public sealed record ProcessResult(
     int? ExitCode, string Stdout, string Stderr, bool TimedOut, bool StdoutTruncated, bool StderrTruncated, TimeSpan Elapsed);
@@ -26,7 +49,7 @@ public sealed class ProcessRunner(Func<IProcessContainment> containment) : IProc
 
     public async Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken ct)
     {
-        var psi = new ProcessStartInfo(request.FileName, request.Arguments)
+        var psi = new ProcessStartInfo(request.FileName)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -37,6 +60,12 @@ public sealed class ProcessRunner(Func<IProcessContainment> containment) : IProc
             StandardErrorEncoding = Utf8,
             WorkingDirectory = request.WorkingDirectory ?? "",
         };
+        if (request.RawArguments is not null)
+            psi.Arguments = request.RawArguments;
+        else
+            foreach (var arg in request.Arguments) psi.ArgumentList.Add(arg);
+        if (request.Environment is not null)
+            foreach (var (name, value) in request.Environment) psi.Environment[name] = value;
 
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
