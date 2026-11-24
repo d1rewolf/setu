@@ -6,7 +6,16 @@ Setu (सेतु, Sanskrit for "bridge") is an MCP server that runs on a Windo
 
 It listens on `127.0.0.1` only and requires a bearer token on every request. You reach it from the agent's machine through an SSH tunnel (`ssh -L`), so nothing is exposed to the network. It needs no admin rights to install. On Windows it starts at logon through a Task Scheduler task; on macOS (15 or later, Apple silicon) it runs as a LaunchAgent, starts at login, and is restarted if it stops.
 
-To install it and connect an agent, follow [docs/connecting.md](docs/connecting.md). It has a section for each platform.
+## Download
+
+Ready-built bundles are on the [Releases page](https://github.com/d1rewolf/setu/releases). Each one holds the program and its install scripts:
+
+- `setu-<version>-win-x64.zip`: for 64-bit Windows. It holds `setu.exe` and the PowerShell scripts.
+- `setu-<version>-macos-arm64.tar.gz`: for macOS 15 or later on Apple silicon. It holds `setu` and the zsh scripts.
+
+Neither needs .NET or anything else installed. `SHA256SUMS` on the same page lets you check the download.
+
+To install it and connect an agent, follow [docs/connecting.md](docs/connecting.md). It has a section for each platform, and starts from the download or from a build of your own.
 
 ## Tools
 
@@ -35,7 +44,7 @@ Shell output is capped at 64 KiB per stream. Errors come back to the agent as pl
 
 ## Build and test
 
-Needs the .NET 10 SDK (pinned in `global.json`). Everything builds on Linux too.
+You only need this to change Setu or build it yourself; the downloads above are built the same way. It needs the .NET 10 SDK (pinned in `global.json`). Everything builds on Linux too.
 
 ```
 dotnet build
@@ -66,6 +75,6 @@ The zsh scripts are in `install/mac/` and run as your normal Mac user, over SSH,
 - `update.sh --binary <path> [--version X.Y.Z]` signs the new build with the same certificate, swaps it in and restarts Setu. Because the certificate is the same, the permissions you granted carry over.
 - `uninstall.sh` stops Setu and removes the app and the LaunchAgent. It keeps the token, config, log and signing certificate unless you add `--remove-data`; after that, a new install needs the permissions granted again.
 
-`--version` only sets the version number the app reports; it is 0.1.0 if you leave it out.
+`--version` only sets the version number the app reports; pass the version you downloaded. It is 0.1.0 if you leave it out.
 
 Settings: the port defaults to 47631 and can be changed with `{"port": 12345}` in `~/Library/Application Support/setu/config.json`. The log is `~/Library/Application Support/setu/setu.log`.

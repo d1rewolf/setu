@@ -1,6 +1,6 @@
 # Installing setu and connecting an agent
 
-This guide takes you from source code to an agent on Linux using your Windows machine or your Mac. Follow [Windows](#windows) or [macOS](#macos). The steps run in the same order on both (the Mac adds one, for granting permissions), and you can set up both and use them side by side.
+This guide takes you from a download (or the source code) to an agent on Linux using your Windows machine or your Mac. Follow [Windows](#windows) or [macOS](#macos). The steps run in the same order on both (the Mac adds one, for granting permissions), and you can set up both and use them side by side.
 
 ## Windows
 
@@ -8,22 +8,33 @@ Replace `user@vm` with your Windows login and the machine's address. This sectio
 
 Tip: if the Windows machine is a VM, take a snapshot before the first install so you can roll back.
 
-### 1. Build
+### 1. Download (or build)
 
-On the Linux machine, in the repository:
+On the Linux machine, download the Windows bundle from the [Releases page](https://github.com/d1rewolf/setu/releases) and unpack it. The commands use version 0.1.0; if the Releases page lists a newer one, use its number instead:
+
+```
+curl -LO https://github.com/d1rewolf/setu/releases/download/v0.1.0/setu-0.1.0-win-x64.zip
+unzip setu-0.1.0-win-x64.zip
+```
+
+This creates a `setu-0.1.0-win-x64` folder holding `setu.exe` and the four install scripts. `setu.exe` is one file that needs nothing else installed on Windows. To check the download, compare `sha256sum setu-0.1.0-win-x64.zip` with the line for it in `SHA256SUMS` on the Releases page.
+
+Download on the Linux machine and copy over SSH as below, rather than downloading on Windows in a browser. Files copied with `scp` don't get the "downloaded from the internet" mark that Windows adds to browser downloads.
+
+To build from source instead, run this in the repository; it produces `publish/win-x64/setu.exe`, and the scripts are in `install/`:
 
 ```
 dotnet publish src/Setu -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/win-x64
 ```
 
-This produces `publish/win-x64/setu.exe`, one file that needs nothing else installed on Windows. Success is the command ending with no errors and that file existing.
-
 ### 2. Copy to Windows
 
 ```
 ssh user@vm mkdir setu
-scp publish/win-x64/setu.exe install/*.ps1 user@vm:setu/
+scp setu-0.1.0-win-x64/* user@vm:setu/
 ```
+
+If you built from source, the second line is `scp publish/win-x64/setu.exe install/*.ps1 user@vm:setu/` instead.
 
 The first line creates a `setu` folder in your Windows home folder (it prints an error if it already exists; that is fine). The second copies the exe and the scripts into it (`install.ps1`, `update.ps1`, `uninstall.ps1` and `common.ps1`, which the install and update scripts load; keep all four together).
 
@@ -102,7 +113,7 @@ Claude Code fills in `${SETU_TOKEN}` from the environment, so start it from the 
 
 ### Updating
 
-Build again (step 1), copy again (step 2), then:
+Download the new release (or build again) as in step 1, copy it as in step 2, then:
 
 ```
 ssh user@vm powershell -NoProfile -ExecutionPolicy Bypass -File setu/update.ps1 -Exe setu/setu.exe
@@ -128,33 +139,44 @@ This removes the task and the program. It keeps `%LOCALAPPDATA%\setu` (token, co
 
 ## macOS
 
-Setu runs on macOS 15 or later on Apple silicon. Replace `<mac>` in the commands with the Mac's address. They log in as `jb`; use your own login on the Mac if it is different.
+Setu runs on macOS 15 or later on Apple silicon. Replace `user@mac` in the commands with your login on the Mac and the Mac's address.
 
 You need to be logged in at the Mac's desktop while you install, because Setu runs in your desktop session. Sign-in over SSH (Remote Login in System Settings › General › Sharing) must be on. You will also need to sit at the Mac once, in step 4, to grant permissions; after that, everything works over SSH, including updates.
 
-### 1. Build
+### 1. Download (or build)
 
-On the Linux machine, in the repository:
+On the Linux machine, download the macOS bundle from the [Releases page](https://github.com/d1rewolf/setu/releases) and unpack it. The commands use version 0.1.0; if the Releases page lists a newer one, use its number instead, here and in `--version` below:
+
+```
+curl -LO https://github.com/d1rewolf/setu/releases/download/v0.1.0/setu-0.1.0-macos-arm64.tar.gz
+tar -xzf setu-0.1.0-macos-arm64.tar.gz
+```
+
+This creates a `setu-0.1.0-macos-arm64` folder holding the `setu` binary and the four install scripts. The binary needs nothing else installed on the Mac; the Mac does not need .NET. To check the download, compare `sha256sum setu-0.1.0-macos-arm64.tar.gz` with the line for it in `SHA256SUMS` on the Releases page.
+
+Download on the Linux machine and copy over SSH as below, rather than downloading on the Mac in a browser. Files copied with `scp` don't get the quarantine mark macOS adds to browser downloads.
+
+To build from source instead, run this in the repository; it produces `publish/osx-arm64/setu`, and the scripts are in `install/mac/`:
 
 ```
 dotnet publish src/Setu.MacApp -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o publish/osx-arm64
 ```
 
-This produces `publish/osx-arm64/setu`, one file that needs nothing else installed on the Mac. The Mac does not need .NET. Success is the command ending with no errors and that file existing.
-
 ### 2. Copy to the Mac
 
 ```
-ssh jb@<mac> 'mkdir -p ~/setu'
-scp publish/osx-arm64/setu install/mac/*.sh jb@<mac>:setu/
+ssh user@mac 'mkdir -p ~/setu'
+scp setu-0.1.0-macos-arm64/* user@mac:setu/
 ```
+
+If you built from source, the second line is `scp publish/osx-arm64/setu install/mac/*.sh user@mac:setu/` instead.
 
 The first line creates a `setu` folder in your home folder on the Mac (it does nothing if the folder already exists). The second copies the binary and the scripts into it (`install.sh`, `update.sh`, `uninstall.sh` and `common.sh`, which the other three load; keep all four together).
 
 ### 3. Install
 
 ```
-ssh jb@<mac> 'zsh ~/setu/install.sh --binary ~/setu/setu --version 0.2.0'
+ssh user@mac 'zsh ~/setu/install.sh --binary ~/setu/setu --version 0.1.0'
 ```
 
 This runs as you, with no admin rights. It:
@@ -164,13 +186,13 @@ This runs as you, with no admin rights. It:
 - registers a LaunchAgent named `com.greatworx.setu` that starts Setu every time you log in, and starts it again if it stops;
 - starts it now and waits until it is listening.
 
-`--version` only sets the version number the app reports; it is 0.1.0 if you leave it out.
+`--version` only sets the version number the app reports; pass the version you downloaded. It is 0.1.0 if you leave it out.
 
 Success looks like "Setu is installed and running on port 47631." (47631 unless you changed the port), followed by how to read the token and the permission steps below. If a permission is missing, the script also opens System Settings on the Mac's screen. macOS shows a "Background Items Added" notification at the Mac; it only tells you Setu will start at login, and needs nothing from you.
 
 If something goes wrong, the script says what:
 
-- "there is no desktop session for jb": nobody is logged in at the Mac. Log in at the Mac's desktop and run the command again.
+- "there is no desktop session for" followed by your login: nobody is logged in at the Mac. Log in at the Mac's desktop and run the command again.
 - "Setu is not listening on port ... after 30 seconds": it prints the last lines of Setu's log, `~/Library/Application Support/setu/setu.log`. "startup failed: setu is already running for this user." means another copy is running already. "Port ... is in use" means you should set a different `"port"` in `~/Library/Application Support/setu/config.json`, for example `{"port": 47633}`, then run the install again. Use the same port in the tunnel and `.mcp.json` below.
 
 ### 4. Grant the permissions at the Mac
@@ -184,7 +206,7 @@ macOS asks a person at the Mac, not a script, before an app can see the screen o
 macOS applies the new permissions only after Setu restarts. Restart it, at the Mac in Terminal or from Linux:
 
 ```
-ssh jb@<mac> 'launchctl kickstart -k gui/$(id -u)/com.greatworx.setu'
+ssh user@mac 'launchctl kickstart -k gui/$(id -u)/com.greatworx.setu'
 ```
 
 Stay at the Mac for two more kinds of prompt:
@@ -199,7 +221,7 @@ The permissions stay through updates. They are lost only if you uninstall with `
 Setu created a random token on first start. Read it into an environment variable on the Linux machine, so it is not left in your shell history:
 
 ```
-export SETU_MAC_TOKEN=$(ssh jb@<mac> 'cat ~/Library/Application\ Support/setu/token')
+export SETU_MAC_TOKEN=$(ssh user@mac 'cat ~/Library/Application\ Support/setu/token')
 ```
 
 The single quotes pass the backslash through to the Mac, where it keeps the space in "Application Support" from splitting the path. The variable is named `SETU_MAC_TOKEN` so it can sit beside the Windows `SETU_TOKEN`; each machine has its own token.
@@ -209,7 +231,7 @@ Check it worked with `echo ${#SETU_MAC_TOKEN}`, which should print 43. Treat the
 ### 6. Open the tunnel
 
 ```
-ssh -N -L 47632:127.0.0.1:47631 jb@<mac>
+ssh -N -L 47632:127.0.0.1:47631 user@mac
 ```
 
 This forwards port 47632 on your Linux machine to Setu on port 47631 on the Mac. The local port is 47632 so that this tunnel and the Windows one (on 47631) can run at the same time. It prints nothing and keeps running; leave it open in its own terminal (or add `-f` to run it in the background). If you changed the port in `config.json`, change the second number.
@@ -236,18 +258,18 @@ Claude Code fills in `${SETU_MAC_TOKEN}` from the environment, so start it from 
 
 ### Updating
 
-Build again (step 1), copy again (step 2), then:
+Download the new release (or build again) as in step 1, copy it as in step 2, then run the update with the new version number (0.1.1 here as an example):
 
 ```
-ssh jb@<mac> 'zsh ~/setu/update.sh --binary ~/setu/setu --version 0.2.1'
+ssh user@mac 'zsh ~/setu/update.sh --binary ~/setu/setu --version 0.1.1'
 ```
 
-It signs the new build with the same certificate, stops Setu, swaps in the new app, starts it again, and waits until it is listening. Success looks like "Setu is updated to version 0.2.1 and running on port 47631." The token, config and permissions stay as they are, so nobody needs to be at the Mac. Your tunnel will drop connections briefly; reconnect your agent (`/mcp` in Claude Code) afterwards.
+It signs the new build with the same certificate, stops Setu, swaps in the new app, starts it again, and waits until it is listening. Success looks like "Setu is updated to version 0.1.1 and running on port 47631." The token, config and permissions stay as they are, so nobody needs to be at the Mac. Your tunnel will drop connections briefly; reconnect your agent (`/mcp` in Claude Code) afterwards.
 
 ### Uninstalling
 
 ```
-ssh jb@<mac> 'zsh ~/setu/uninstall.sh'
+ssh user@mac 'zsh ~/setu/uninstall.sh'
 ```
 
 This stops Setu and removes the app and the LaunchAgent. It keeps `~/Library/Application Support/setu` (token, config, log) and the signing certificate, so a later install keeps the permissions. To delete those too, run `zsh ~/setu/uninstall.sh --remove-data` the same way. Setu's permissions are then gone, and a new install needs step 4 again. The script also tries to remove Setu from the Screen Recording and Accessibility lists; if macOS does not let it, it tells you to remove Setu from both lists in System Settings by hand.
