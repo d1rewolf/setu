@@ -8,7 +8,7 @@ $dataDir   = Join-Path $env:LOCALAPPDATA 'setu'
 $tokenFile = Join-Path $dataDir 'token'
 $logFile   = Join-Path $dataDir 'setu.log'
 # Printed when the server does not come up in time: the logon task never starts without a desktop session.
-$sessionHint = "Are you logged on at the VM's desktop? The task only runs in your interactive session."
+$sessionHint = "Are you logged on at the Windows desktop? The task only runs in your interactive session."
 
 function Get-McpPort {
     $port = 47631

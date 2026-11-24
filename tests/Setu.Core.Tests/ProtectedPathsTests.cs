@@ -22,7 +22,7 @@ public sealed class ProtectedPathsTests : IDisposable
     [Fact]
     public void Message_IsExact()
         => Assert.Equal(
-            "/x is in a folder macOS protects (Desktop, Documents, Downloads, iCloud Drive, other apps' data, removable volumes). Setu has no access to it, on purpose. Work in another folder, or ask John to copy the file out.",
+            "/x is in a folder macOS protects (Desktop, Documents, Downloads, iCloud Drive, other apps' data, removable volumes). Setu has no access to it, on purpose. Work in another folder, or ask someone at the Mac to copy the file out.",
             ProtectedPaths.Message("/x"));
 
     [Fact]

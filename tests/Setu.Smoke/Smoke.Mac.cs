@@ -171,7 +171,7 @@ sealed partial class Smoke
 
     private async Task ProtectedFoldersRefused()
     {
-        const string tail = " is in a folder macOS protects (Desktop, Documents, Downloads, iCloud Drive, other apps' data, removable volumes). Setu has no access to it, on purpose. Work in another folder, or ask John to copy the file out.";
+        const string tail = " is in a folder macOS protects (Desktop, Documents, Downloads, iCloud Drive, other apps' data, removable volumes). Setu has no access to it, on purpose. Work in another folder, or ask someone at the Mac to copy the file out.";
         foreach (var (tool, path) in new[] { ("read_file", "~/Documents/x"), ("list_dir", "~/Downloads") })
         {
             var r = await Call(tool, ("path", path));

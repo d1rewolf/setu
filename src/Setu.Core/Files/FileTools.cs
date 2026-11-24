@@ -406,7 +406,7 @@ public sealed class FileTools(RequestLog log, FileToolsOptions options)
 
     internal static string TimeLimitMessage(string tool, TimeSpan limit)
         => $"{tool} did not finish within {(int)limit.TotalSeconds} seconds. A folder it touched may be waiting on a macOS permission prompt at the Mac, " +
-           "or the folder is very large. Narrow the path, or ask John to check the Mac's screen.";
+           "or the folder is very large. Narrow the path, or ask someone at the Mac to check its screen.";
 
     private bool IsProtectedLink(FileSystemInfo e)
         => !options.Protected.IsEmpty && e.LinkTarget is not null && options.Protected.Match(e.FullName) is not null;

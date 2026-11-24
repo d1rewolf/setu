@@ -14,7 +14,7 @@ namespace Setu.Win32;
 /// forbids breakaway, Windows says ERROR_ACCESS_DENIED and the program is started through WMI
 /// Win32_Process.Create instead, whose parent is WmiPrvSE and outside every job.
 /// Console programs get their own visible console window on both paths (CREATE_NEW_CONSOLE here, and
-/// Win32_Process.Create does the same), so John can see and use them; GUI programs start normally.
+/// Win32_Process.Create does the same), so the logged-on user can see and use them; GUI programs start normally.
 /// </summary>
 public sealed class DetachedLauncher(RequestLog log) : IDetachedLauncher
 {

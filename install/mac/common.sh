@@ -16,14 +16,14 @@ CERT_CN="Setu Code Signing"
 DOMAIN="gui/$(id -u)"
 DEFAULT_PORT=47631
 
-SESSION_HINT="Is John logged on at the Mac's desktop? Setu only runs in the logged-on user's session (after a restart, someone has to log in once because FileVault is on)."
+SESSION_HINT="Is someone logged in at the Mac's desktop as this user? Setu only runs in that user's desktop session, so after a restart someone has to log in at the Mac once."
 
 say()  { print -r -- "$*"; }
 fail() { print -r -- "Error: $*" >&2; exit 1; }
 
 # Parses --binary <path> and --version <x> into BINARY and VERSION.
 parse_binary_args() {
-  BINARY="" VERSION="0.1.0"
+  BINARY="" VERSION="0.1.1"
   while (( $# )); do
     case $1 in
       --binary)  (( $# >= 2 )) || fail "--binary needs a path."; BINARY=$2; shift 2 ;;

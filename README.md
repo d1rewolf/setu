@@ -75,6 +75,6 @@ The zsh scripts are in `install/mac/` and run as your normal Mac user, over SSH,
 - `update.sh --binary <path> [--version X.Y.Z]` signs the new build with the same certificate, swaps it in and restarts Setu. Because the certificate is the same, the permissions you granted carry over.
 - `uninstall.sh` stops Setu and removes the app and the LaunchAgent. It keeps the token, config, log and signing certificate unless you add `--remove-data`; after that, a new install needs the permissions granted again.
 
-`--version` only sets the version number the app reports; pass the version you downloaded. It is 0.1.0 if you leave it out.
+`--version` only sets the version number the app reports; pass the version you downloaded. It is 0.1.1 if you leave it out.
 
 Settings: the port defaults to 47631 and can be changed with `{"port": 12345}` in `~/Library/Application Support/setu/config.json`. The log is `~/Library/Application Support/setu/setu.log`.

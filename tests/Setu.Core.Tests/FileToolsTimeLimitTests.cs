@@ -21,7 +21,7 @@ public sealed class FileToolsTimeLimitTests
             var ex = Assert.Throws<McpException>(() =>
                 Tools(TimeSpan.FromMilliseconds(100)).Run("search", "/x", () => { release.Wait(TimeSpan.FromSeconds(5)); return "done"; }));
             Assert.Equal(
-                "search did not finish within 0 seconds. A folder it touched may be waiting on a macOS permission prompt at the Mac, or the folder is very large. Narrow the path, or ask John to check the Mac's screen.",
+                "search did not finish within 0 seconds. A folder it touched may be waiting on a macOS permission prompt at the Mac, or the folder is very large. Narrow the path, or ask someone at the Mac to check its screen.",
                 ex.Message);
         }
         finally

@@ -1,4 +1,4 @@
-# Smoke test and VM checklist
+# Smoke test and Windows checklist
 
 This is the first real run of setu on the Windows machine. The smoke client checks most things for you. This page covers the rest: things only a person can look at, or that cannot be automated. Work through it top to bottom and fill in the results table at the end.
 
@@ -42,7 +42,7 @@ Use any MCP client for these, for example Claude Code connected as in [connectin
 
 **Console window.** Call `start_process` with path `cmd.exe`. Success: a console window appears on the VM desktop and stays open. Close it by hand.
 
-**Tray screenshot.** Call `screenshot` with `target=screen` and look at the system tray. Success: the tray icons for OBS and Sakshi are visible in the image.
+**Tray screenshot.** Call `screenshot` with `target=screen` and look at the system tray. Success: the tray icons of the programs you have running are visible in the image.
 
 **start_process survives a restart.** Call `start_process` for `notepad.exe` and note the PID. Then run the update over SSH (as in "Updating" in [connecting.md](connecting.md)), reconnect, and call `powershell` with `Get-Process -Id <pid>`. Success: Notepad is still running. (The smoke client checks only the 3 second part of this, because it cannot restart the server it is talking to.) Close Notepad afterwards.
 
@@ -67,12 +67,6 @@ Success: a `setu` process is listed again, and the log has a new `listening on h
 **RDP disconnect** (only if you view the VM over RDP). Disconnect the RDP window without logging off, then call `screenshot`. Success: the same locked/disconnected error, while `list_dir` still works. Reconnect and confirm `screenshot` works again.
 
 **Sleep.** Leave the VM idle past its sleep timeout (or longer than an hour if it never sleeps). Success: a `list_dir` call afterwards still works, with no need to log on again. If the tunnel dropped, reopen it and reconnect; that is not a server failure.
-
-**The Sakshi scenario.**
-1. `list_dir` with `path=C:\Users\JB\Videos`, `sort=time`, `descending=true`. Success: the newest recording is the first line.
-2. `read_file` with `path=%APPDATA%\Sakshi\state\sakshi.log`. Success: numbered log lines, even while Sakshi is running and writing to it.
-3. Stop Sakshi, then call `start_process` with Sakshi's exe path. Success: it returns a PID, and the Sakshi tray icon comes back.
-4. `screenshot` the screen and look at the tray. Success: the Sakshi icon is there.
 
 ## 4. Which launcher path was used
 
@@ -122,13 +116,10 @@ Fill this in after the run. Use PASS or FAIL, and a short note for anything that
 | Smoke: click_type_into_notepad | | |
 | Smoke: scratch folder and Notepad cleaned up | | |
 | start_process cmd.exe shows a visible console window | | |
-| Screenshot of the tray shows OBS and Sakshi | | |
+| Screenshot of the tray shows your tray icons | | |
 | start_process survives update.ps1 (PID still alive) | | |
 | powershell Start-Process notepad: alive after update.ps1? (record yes/no) | | |
 | Server restarts after Stop-Process (time to come back) | | |
 | Locked screen: screenshot errors, list_dir works | | |
 | RDP disconnect: screenshot errors, list_dir works | | |
 | Idle past sleep timeout: still reachable | | |
-| Sakshi: list_dir newest-first on Videos | | |
-| Sakshi: read_file on sakshi.log | | |
-| Sakshi: restart with start_process, tray icon back | | |
